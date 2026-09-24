@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Admin · Intelli Tax Advisors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400;1,6..96,500&family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<div id="boot" class="boot"><span class="eyebrow">Loading…</span></div>
+
+<!-- Sign in / password recovery -->
+<section id="auth" class="auth" hidden>
+  <div class="auth-card">
+    <p class="brand"><b>Intelli</b><span>Admin</span></p>
+
+    <form id="loginForm" novalidate>
+      <h1>Sign in</h1>
+      <div class="field"><label for="lEmail">Email</label><input id="lEmail" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="lPass">Password</label><input id="lPass" type="password" autocomplete="current-password" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+      <button class="linkish" type="button" data-auth="reset">Forgot password?</button>
+    </form>
+
+    <form id="resetForm" novalidate hidden>
+      <h1>Reset password</h1>
+      <p class="muted">We'll email you a link to set a new password.</p>
+      <div class="field"><label for="rEmail">Email</label><input id="rEmail" type="email" autocomplete="username" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Send reset link</button>
+      <button class="linkish" type="button" data-auth="login">Back to sign in</button>
+    </form>
+
+    <form id="newPassForm" novalidate hidden>
+      <h1>Choose a new password</h1>
+      <div class="field"><label for="nPass">New password</label><input id="nPass" type="password" autocomplete="new-password" minlength="8" required></div>
+      <div class="field"><label for="nPass2">Repeat password</label><input id="nPass2" type="password" autocomplete="new-password" minlength="8" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Save password</button>
+    </form>
+
+    <div id="notAdmin" hidden>
+      <h1>No admin access</h1>
+      <p class="muted">You're signed in as <b id="naEmail"></b>, but this account isn't listed as an admin. Ask an existing admin to add it.</p>
+      <button class="btn btn-block" type="button" data-signout>Sign out</button>
+    </div>
+
+    <div id="noConfig" hidden>
+      <h1>Supabase isn't configured</h1>
+      <p class="muted">Add your project URL and anon key to <code>assets/js/config.js</code>, then reload.</p>
+    </div>
+
+    <p class="auth-msg" id="authMsg" role="alert"></p>
+  </div>
+</section>
+
+<!-- Portal -->
+<div id="app" class="app" hidden>
+  <aside class="side" id="side">
+    <a class="brand" href="#/dashboard"><b>Intelli</b><span>Admin</span></a>
+    <nav class="side-nav" id="sideNav">
+      <p class="grp">Overview</p>
+      <a href="#/dashboard" data-nav="dashboard">Dashboard</a>
+      <a href="#/enquiries" data-nav="enquiries">Enquiries <span class="count" id="newCount" hidden></span></a>
+      <p class="grp">Content</p>
+      <a href="#/insights" data-nav="insights">Insights &amp; blog</a>
+      <a href="#/c/services" data-nav="c/services">Services</a>
+      <a href="#/c/industries" data-nav="c/industries">Industries</a>
+      <a href="#/c/partners" data-nav="c/partners">Partners</a>
+      <a href="#/c/clients" data-nav="c/clients">Client logos</a>
+      <a href="#/c/testimonials" data-nav="c/testimonials">Testimonials</a>
+      <a href="#/sections" data-nav="sections">Page sections</a>
+      <a href="calendar.html">Compliance calendar</a>
+      <p class="grp">Site</p>
+      <a href="#/media" data-nav="media">Media library</a>
+      <a href="#/settings" data-nav="settings">Settings</a>
+    </nav>
+    <div class="side-foot">
+      <a href="../index.html" target="_blank" rel="noopener">View website ↗</a>
+      <span class="who" id="whoami"></span>
+      <button type="button" data-signout>Sign out</button>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  <div class="mainwrap">
+    <header class="mobile-top">
+      <button type="button" id="sideToggle" aria-label="Open menu" aria-controls="side" aria-expanded="false"><i></i></button>
+      <p class="brand"><b>Intelli</b><span>Admin</span></p>
+    </header>
+    <main id="view" class="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<!-- Shared overlays -->
+<dialog id="drawer" class="drawer" aria-labelledby="drawerTitle">
+  <div class="drawer-inner">
+    <header><h2 id="drawerTitle"></h2><button type="button" class="icon-btn" data-close aria-label="Close">✕</button></header>
+    <div class="drawer-body" id="drawerBody"></div>
+    <footer id="drawerFoot"></footer>
+  </div>
+</dialog>
+
+<dialog id="confirm" class="confirm">
+  <form method="dialog">
+    <p id="confirmMsg"></p>
+    <div class="row-end">
+      <button class="btn" value="cancel">Cancel</button>
+      <button class="btn btn-danger" value="ok" id="confirmOk">Delete</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="picker" class="picker" aria-labelledby="pickerTitle">
+  <form method="dialog">
+    <header><h2 id="pickerTitle">Choose from media library</h2><button class="icon-btn" value="cancel" aria-label="Close">✕</button></header>
+    <div class="picker-body" id="pickerBody"></div>
+  </form>
+</dialog>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/content.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/schema.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Insights from Intelli Tax Advisors LLP — plain-language briefings on Indian tax.">
+<title>Insights · Intelli Tax Advisors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400;1,6..96,500&family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="Intelli Tax Advisors — home"><b>Intelli</b><span>Tax Advisors LLP</span></a>
+    <nav class="nav" id="nav">
+      <a href="index.html#about">About</a>
+      <a href="index.html#services">Services</a>
+      <a href="index.html#industries">Industries</a>
+      <a href="index.html#partners">Partners</a>
+      <a href="index.html#clients">Clients</a>
+      <a class="btn btn-ghost" href="index.html#contact">Book a consultation</a>
+    </nav>
+    <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><i></i></button>
+  </div>
+</header>
+
+<main id="top">
+  <section class="band insights">
+    <div class="wrap">
+      <div class="head">
+        <div>
+          <p class="eyebrow">Insights</p>
+          <h2>Notes from <em>the practice.</em></h2>
+        </div>
+        <p>Plain-language briefings on the changes that affect Indian businesses and taxpayers.</p>
+      </div>
+      <div class="chips" id="chips" role="group" aria-label="Filter by topic"></div>
+      <div class="post-list" id="postList"><p class="empty eyebrow">Loading…</p></div>
+    </div>
+  </section>
+</main>
+
+
+<footer class="foot">
+  <div class="wrap">
+    <p class="wordmark" aria-hidden="true">Intelli<em>.</em></p>
+    <div class="foot-row">
+      <span>© 2026 Intelli Tax Advisors LLP · New Delhi</span>
+      <nav>
+        <a href="https://www.instagram.com/intellitaxadvisors" target="_blank" rel="noopener">Instagram</a>
+        <a href="https://www.linkedin.com/search/results/all/?keywords=Intelli%20Tax%20Advisors" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="index.html">Privacy</a>
+        <a href="index.html">Accessibility</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/content.js"></script>
+<script src="assets/js/api.js"></script>
+<script>
+(function(){
+  const nav = document.getElementById('nav'), mb = document.getElementById('menuBtn');
+  mb.addEventListener('click', () => { const o = nav.classList.toggle('open'); mb.setAttribute('aria-expanded', o); });
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const arrow = '<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M9 3l5 5-5 5"/></svg>';
+  const list = document.getElementById('postList'), chips = document.getElementById('chips');
+  const fmt = d => d ? new Date(d).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) : '';
+  let posts = [], topic = 'All';
+
+  function render(){
+    const shown = topic === 'All' ? posts : posts.filter(p => p.category === topic);
+    list.innerHTML = shown.length ? shown.map(p => {
+      const linked = p.has_body || p.body;
+      const inner = `<div class="when"><span class="eyebrow">${esc(p.category)}</span><span class="eyebrow">${esc(fmt(p.published_at))}</span></div>
+        <div><h3>${esc(p.title)}</h3><p>${esc(p.excerpt)}</p></div>
+        <span class="eyebrow mins">${p.read_minutes ? esc(p.read_minutes) + ' min ' : ''}${linked ? arrow : ''}</span>`;
+      return linked ? `<a class="prow" href="post.html?slug=${encodeURIComponent(p.slug)}">${inner}</a>` : `<div class="prow">${inner}</div>`;
+    }).join('') : '<p class="empty">No briefings in this topic yet.</p>';
+    chips.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === topic));
+  }
+
+  chips.addEventListener('click', e => { const b = e.target.closest('button'); if (b) { topic = b.dataset.t; render(); } });
+  Api.getInsights().then(rows => {
+    posts = rows || [];
+    const topics = ['All', ...new Set(posts.map(p => p.category).filter(Boolean))];
+    chips.innerHTML = topics.length > 2 ? topics.map(t => `<button type="button" data-t="${esc(t)}">${esc(t)}</button>`).join('') : '';
+    render();
+  }).catch(() => { list.innerHTML = '<p class="empty">Insights could not be loaded. Please try again shortly.</p>'; });
+})();
+</script>
+</body>
+</html>

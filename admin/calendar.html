@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Compliance calendar · Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400;1,6..96,500&family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="admin.css">
+<style>
+  .cal-view{margin:0 auto}
+  .cal-top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:24px}
+  .cal-top .who{font-size:13px;color:var(--muted);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .table tr.past td,.table tr.hidden-row td{color:var(--ash)}
+  .table tr.hidden-row .t-main{text-decoration:line-through}
+  .badge.changed{color:var(--warn);background:var(--warn-bg)}
+  .badge.custom{color:var(--info);background:var(--info-bg)}
+  .badge.hidden{color:var(--muted);background:var(--paper)}
+  .was{font-size:12px;color:var(--ash);margin-top:2px}
+  .field input[type=date]{width:100%;padding:10px 12px;border:1px solid var(--line);background:var(--white);border-radius:0;font-size:15px}
+</style>
+</head>
+<body>
+
+<div id="boot" class="boot"><span class="eyebrow">Loading…</span></div>
+
+<section id="auth" class="auth" hidden>
+  <div class="auth-card">
+    <p class="brand"><b>Intelli</b><span>Admin</span></p>
+    <form id="loginForm" novalidate>
+      <h1>Sign in</h1>
+      <div class="field"><label for="lEmail">Email</label><input id="lEmail" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="lPass">Password</label><input id="lPass" type="password" autocomplete="current-password" required></div>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+    </form>
+    <div id="notAdmin" hidden>
+      <h1>No admin access</h1>
+      <p class="muted">You're signed in as <b id="naEmail"></b>, but this account isn't listed as an admin.</p>
+      <button class="btn btn-block" type="button" data-signout>Sign out</button>
+    </div>
+    <div id="noConfig" hidden>
+      <h1>Supabase isn't configured</h1>
+      <p class="muted">Add your project URL and anon key to <code>assets/js/config.js</code>, then reload.</p>
+    </div>
+    <p class="auth-msg" id="authMsg" role="alert"></p>
+  </div>
+</section>
+
+<main id="app" class="view cal-view" hidden>
+  <div class="cal-top">
+    <p class="brand"><b>Intelli</b><span>Admin</span></p>
+    <div class="who"><span id="whoami"></span><a class="linkish" href="../index.html" target="_blank" rel="noopener">View website ↗</a><button class="linkish" type="button" data-signout>Sign out</button></div>
+  </div>
+  <div class="page-head">
+    <div>
+      <p class="eyebrow">Homepage</p>
+      <h1>Compliance calendar</h1>
+      <p class="sub">Routine due dates are generated automatically. When CBDT or CBIC extends a deadline, edit that date here; the homepage shows the change straight away. Hide a date to take it off the site, or add a one-off date.</p>
+    </div>
+    <div class="actions"><button class="btn btn-primary" type="button" id="addBtn">Add a date</button></div>
+  </div>
+  <div class="toolbar">
+    <div class="tabs" id="tabs">
+      <button type="button" data-f="upcoming" aria-pressed="true">Next 12 months</button>
+      <button type="button" data-f="changes" aria-pressed="false">Changes only <small id="chCount"></small></button>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Date</th><th>Deadline</th><th>Status</th><th></th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p class="list-note">The homepage shows the next five visible dates, using India time.</p>
+</main>
+
+<dialog id="drawer" class="drawer" aria-labelledby="drawerTitle">
+  <form method="dialog" class="drawer-inner" id="editForm" novalidate>
+    <header><h2 id="drawerTitle"></h2><button class="icon-btn" value="cancel" aria-label="Close" formnovalidate>✕</button></header>
+    <div class="drawer-body">
+      <div class="form">
+        <div class="field"><label for="eDate">Due date <i>*</i></label><input id="eDate" type="date" required><span class="help" id="eDateHelp"></span></div>
+        <div class="field" style="justify-content:flex-end"><label class="switch"><input id="eHidden" type="checkbox"><span class="track"></span>Hide from website</label></div>
+        <div class="field full"><label for="eTitle">Title <i>*</i></label><input id="eTitle" type="text" maxlength="120" required></div>
+        <div class="field full"><label for="eSub">Subtitle</label><input id="eSub" type="text" maxlength="200"></div>
+      </div>
+      <p class="auth-msg err" id="eMsg" role="alert"></p>
+    </div>
+    <footer>
+      <button class="btn btn-danger" type="button" id="eRemove" hidden></button>
+      <div class="grp"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn btn-primary" type="button" id="eSave">Save</button></div>
+    </footer>
+  </form>
+</dialog>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../assets/js/config.js"></script>
+<script src="../assets/js/calendar.js"></script>
+<script>
+(function(){
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const CAL = window.ComplianceCalendar, cfg = window.SITE_CONFIG || {};
+  const fmt = d => `${d.slice(8,10)} ${CAL.MONTHS[+d.slice(5,7) - 1]} ${d.slice(0,4)}`;
+  const toast = (msg, err) => { const t = document.createElement('div'); t.className = 'toast' + (err ? ' err' : ''); t.textContent = msg; $('toasts').append(t); setTimeout(() => t.remove(), 3500); };
+
+  function screen(name){
+    $('boot').hidden = true;
+    $('auth').hidden = name === 'app';
+    $('app').hidden = name !== 'app';
+    for (const id of ['loginForm','notAdmin','noConfig']) $(id).hidden = id !== name;
+  }
+
+  if (!cfg.supabaseUrl || !cfg.supabaseAnonKey || !window.supabase) { screen('noConfig'); return; }
+  const db = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+
+  // ---- Auth
+  async function route(session){
+    if (!session) { screen('loginForm'); return; }
+    const { data, error } = await db.from('admins').select('user_id').eq('user_id', session.user.id);
+    if (error || !data.length) { $('naEmail').textContent = session.user.email; screen('notAdmin'); return; }
+    $('whoami').textContent = session.user.email;
+    screen('app');
+    load();
+  }
+  db.auth.getSession().then(({ data }) => route(data.session));
+  db.auth.onAuthStateChange((ev, session) => { if (ev === 'SIGNED_IN' || ev === 'SIGNED_OUT') route(session); });
+
+  $('loginForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    $('authMsg').className = 'auth-msg'; $('authMsg').textContent = 'Signing in…';
+    const { error } = await db.auth.signInWithPassword({ email: $('lEmail').value.trim(), password: $('lPass').value });
+    if (error) { $('authMsg').className = 'auth-msg err'; $('authMsg').textContent = error.message; }
+    else $('authMsg').textContent = '';
+  });
+  document.querySelectorAll('[data-signout]').forEach(b => b.addEventListener('click', () => db.auth.signOut()));
+
+  // ---- List
+  let overrides = [], items = [], filter = 'upcoming';
+  async function load(){
+    const { data, error } = await db.from('compliance_dates').select('*');
+    if (error) { toast('Couldn\'t load the calendar: ' + error.message, true); return; }
+    overrides = data; render();
+  }
+
+  function render(){
+    const today = CAL.todayIST(), from = new Date(Date.now() - 31 * 864e5).toISOString().slice(0,10);
+    const to = String(+today.slice(0,4) + 1) + today.slice(4);
+    items = CAL.merge(today, overrides);
+    const changes = items.filter(i => i.override);
+    $('chCount').textContent = changes.length || '';
+    const shown = filter === 'changes' ? changes : items.filter(i => i.due_date >= from && i.due_date <= to);
+    $('rows').innerHTML = shown.length ? shown.map(i => {
+      const idx = items.indexOf(i), past = i.due_date < today;
+      const status = i.hidden ? '<span class="badge hidden">Hidden</span>'
+        : i.source === 'custom' ? '<span class="badge custom">Added</span>'
+        : i.source === 'changed' ? '<span class="badge changed">Changed</span>'
+        : '<span class="badge draft">Built-in</span>';
+      const was = i.source === 'changed' && i.base.due_date !== i.due_date ? `<div class="was">was ${fmt(i.base.due_date)}</div>` : '';
+      return `<tr class="click${past ? ' past' : ''}${i.hidden ? ' hidden-row' : ''}" data-i="${idx}">
+        <td style="white-space:nowrap">${fmt(i.due_date)}${was}</td>
+        <td><div class="t-main">${esc(i.title)}</div><div class="t-sub">${esc(i.subtitle)}</div></td>
+        <td>${status}</td>
+        <td><div class="t-actions"><button class="btn btn-sm" type="button" data-i="${idx}">Edit</button></div></td></tr>`;
+    }).join('') : `<tr><td colspan="4" class="empty">${filter === 'changes' ? 'No changes yet. Every date follows the built-in rules.' : 'No dates.'}</td></tr>`;
+  }
+
+  $('tabs').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    filter = b.dataset.f;
+    $('tabs').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    render();
+  });
+  $('rows').addEventListener('click', e => { const r = e.target.closest('[data-i]'); if (r) edit(items[+r.dataset.i]); });
+  $('addBtn').addEventListener('click', () => edit(null));
+
+  // ---- Edit
+  let editing = null; // null = new one-off date
+  function edit(item){
+    editing = item;
+    const base = item?.base;
+    $('drawerTitle').textContent = !item ? 'Add a date' : base ? 'Edit built-in date' : 'Edit date';
+    $('eDate').value = item?.due_date || '';
+    $('eTitle').value = item?.title || '';
+    $('eSub').value = item?.subtitle || '';
+    $('eHidden').checked = !!item?.hidden;
+    $('eDateHelp').textContent = base ? 'Built-in: ' + fmt(base.due_date) : '';
+    $('eMsg').textContent = '';
+    const rm = $('eRemove');
+    rm.hidden = !item?.override;
+    rm.textContent = base ? 'Reset to built-in' : 'Delete';
+    $('drawer').showModal();
+  }
+
+  $('eSave').addEventListener('click', async () => {
+    const date = $('eDate').value, title = $('eTitle').value.trim(), sub = $('eSub').value.trim(), hidden = $('eHidden').checked;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { $('eMsg').textContent = 'Choose a due date.'; $('eDate').focus(); return; }
+    if (!title) { $('eMsg').textContent = 'Add a title.'; $('eTitle').focus(); return; }
+    const base = editing?.base;
+    let res;
+    if (base) {
+      // Store only what differs from the built-in, so later wording fixes to the rules still apply.
+      const row = { key: base.key, due_date: date !== base.due_date ? date : null, title: title !== base.title ? title : null,
+                    subtitle: sub !== base.subtitle ? sub : null, is_hidden: hidden };
+      res = (!row.due_date && !row.title && row.subtitle === null && !hidden)
+        ? await db.from('compliance_dates').delete().eq('key', base.key)
+        : await db.from('compliance_dates').upsert(row, { onConflict: 'key' });
+    } else {
+      const row = { due_date: date, title, subtitle: sub || null, is_hidden: hidden };
+      res = editing?.override
+        ? await db.from('compliance_dates').update(row).eq('id', editing.override.id)
+        : await db.from('compliance_dates').insert(row);
+    }
+    if (res.error) { $('eMsg').textContent = res.error.message; return; }
+    $('drawer').close(); toast('Saved. The homepage now shows this change.'); load();
+  });
+
+  $('eRemove').addEventListener('click', async () => {
+    const o = editing?.override; if (!o) return;
+    if (!confirm(editing.base ? 'Reset this date to the built-in rule?' : 'Delete this date?')) return;
+    const { error } = await db.from('compliance_dates').delete().eq('id', o.id);
+    if (error) { $('eMsg').textContent = error.message; return; }
+    $('drawer').close(); toast(editing.base ? 'Reset to built-in.' : 'Deleted.'); load();
+  });
+})();
+</script>
+</body>
+</html>

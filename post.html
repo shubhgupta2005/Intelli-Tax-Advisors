@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Insights from Intelli Tax Advisors LLP — plain-language briefings on Indian tax.">
+<title>Insights · Intelli Tax Advisors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400;1,6..96,500&family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="Intelli Tax Advisors — home"><b>Intelli</b><span>Tax Advisors LLP</span></a>
+    <nav class="nav" id="nav">
+      <a href="index.html#about">About</a>
+      <a href="index.html#services">Services</a>
+      <a href="index.html#industries">Industries</a>
+      <a href="index.html#partners">Partners</a>
+      <a href="index.html#clients">Clients</a>
+      <a class="btn btn-ghost" href="index.html#contact">Book a consultation</a>
+    </nav>
+    <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><i></i></button>
+  </div>
+</header>
+
+<main id="top">
+  <section class="band article">
+    <div class="wrap">
+      <a class="back" href="insights.html"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M14 8H2M7 3L2 8l5 5"/></svg> All insights</a>
+      <article id="article" aria-live="polite">
+        <p class="eyebrow" style="color:var(--ash)">Loading…</p>
+      </article>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p class="wordmark" aria-hidden="true">Intelli<em>.</em></p>
+    <div class="foot-row">
+      <span>© 2026 Intelli Tax Advisors LLP · New Delhi</span>
+      <nav>
+        <a href="https://www.instagram.com/intellitaxadvisors" target="_blank" rel="noopener">Instagram</a>
+        <a href="https://www.linkedin.com/search/results/all/?keywords=Intelli%20Tax%20Advisors" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="index.html">Privacy</a>
+        <a href="index.html">Accessibility</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/content.js"></script>
+<script src="assets/js/api.js"></script>
+<script>
+(function(){
+  const nav = document.getElementById('nav'), mb = document.getElementById('menuBtn');
+  mb.addEventListener('click', () => { const o = nav.classList.toggle('open'); mb.setAttribute('aria-expanded', o); });
+
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const el = document.getElementById('article');
+  const slug = new URLSearchParams(location.search).get('slug');
+  const notFound = () => { el.innerHTML = '<h1>Briefing not found.</h1><p class="excerpt">It may have been moved or unpublished. Head back to the latest insights.</p>'; };
+
+  if (!slug) return notFound();
+  Api.getInsight(slug).then(p => {
+    if (!p || !p.body) return notFound();
+    document.title = p.title + ' · Intelli Tax Advisors';
+    const date = p.published_at ? new Date(p.published_at).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}) : '';
+    // Body is Markdown written in the admin portal; sanitised before it touches the DOM.
+    const html = window.marked && window.DOMPurify ? DOMPurify.sanitize(marked.parse(p.body)) : '<p>' + esc(p.body) + '</p>';
+    el.innerHTML = `
+      <div class="meta"><span class="eyebrow">${esc(p.category)}</span>${p.read_minutes ? `<span class="eyebrow">${esc(p.read_minutes)} min</span>` : ''}${date ? `<span class="eyebrow">${esc(date)}</span>` : ''}</div>
+      <h1>${esc(p.title)}</h1>
+      ${p.excerpt ? `<p class="excerpt">${esc(p.excerpt)}</p>` : ''}
+      <div class="content">${html}</div>
+      <div class="cta"><p>Questions about how this affects you?</p><a class="btn btn-dark" href="index.html#contact">Talk to a partner</a></div>`;
+  }).catch(notFound);
+})();
+</script>
+</body>
+</html>

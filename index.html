@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Intelli Tax Advisors LLP — a New Delhi tax practice for direct tax, GST, litigation and advisory, led by two ex-Big 4 partners.">
+<title>Intelli Tax Advisors</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400;1,6..96,500&family=Hanken+Grotesk:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Intelli Tax Advisors — home"><b>Intelli</b><span>Tax Advisors LLP</span></a>
+    <nav class="nav" id="nav">
+      <a href="#about">About</a>
+      <a href="#services">Services</a>
+      <a href="#industries">Industries</a>
+      <a href="#partners">Partners</a>
+      <a href="#clients">Clients</a>
+      <a class="btn btn-ghost" href="#contact">Book a consultation</a>
+    </nav>
+    <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="nav"><i></i></button>
+  </div>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="wrap">
+      <div>
+        <p class="eyebrow" id="heroEyebrow">Est. 2019 · Boutique tax &amp; advisory · New Delhi</p>
+        <h1 id="heroTitle">
+          <span class="line"><span>Driven by expertise.</span></span>
+          <span class="line"><span><em>Defined by integrity.</em></span></span>
+        </h1>
+        <p class="lede" id="heroLede">A New Delhi practice handling direct tax, GST and litigation for 100+ businesses — from listed companies to fast-growing start-ups — led by two ex-Big 4 partners, so the numbers never catch you off guard.</p>
+        <div class="ctas">
+          <a class="btn btn-light" href="#contact" id="heroCta1">Book a consultation
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 8h12M9 3l5 5-5 5"/></svg></a>
+          <a class="btn btn-ghost" href="#services" id="heroCta2">Explore services</a>
+        </div>
+      </div>
+
+      <aside class="ledger" aria-label="Upcoming compliance deadlines">
+        <header>
+          <span class="eyebrow">Compliance calendar</span>
+          <span class="today" id="today"></span>
+        </header>
+        <ol id="deadlines"></ol>
+        <footer id="calNote">Indicative statutory due dates. Subject to CBDT / CBIC extensions — we track them so you don't have to.</footer>
+      </aside>
+    </div>
+  </section>
+
+  <!-- FIGURES -->
+  <section class="figures" aria-label="Firm at a glance">
+    <div class="wrap" id="figures">
+      <div class="fig"><strong>2019</strong><span>Established in New Delhi</span></div>
+      <div class="fig"><strong>100+</strong><span>Clients, including listed companies</span></div>
+      <div class="fig"><strong>Ex Big 4</strong><span>Partner pedigree</span></div>
+      <div class="fig"><strong>20+ yrs</strong><span>Combined partner experience</span></div>
+    </div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="band about" id="about">
+    <div class="wrap about-grid">
+      <div>
+        <p class="eyebrow" id="aboutEyebrow" style="color:var(--ash);margin-bottom:28px">About the firm</p>
+        <p class="statement" id="aboutStatement">A single-window practice, <em>built on relationships</em> — where good tax advice is quiet, exact and early.</p>
+      </div>
+      <div class="body" id="aboutBody">
+        <p>Founded in 2019 and headquartered in New Delhi, Intelli Tax Advisors LLP is a committed, resourceful group of like-minded professionals serving clients across India — from listed companies to fast-growing start-ups.</p>
+        <p>We work as an extension of each client's own finance team. The partners who scope your engagement are the same people who file your returns, answer your notices and sit across the table from the tax authorities.</p>
+        <div class="pillars">
+          <div class="pillar"><span class="eyebrow">Value</span><p>Skilled advice, delivered on time — reflecting integrity, service, excellence and team-work.</p></div>
+          <div class="pillar"><span class="eyebrow">Empower</span><p>Help clients make intelligent, informed decisions by explaining the legal and procedural issues.</p></div>
+          <div class="pillar"><span class="eyebrow">Advise</span><p>Stay abreast of law and rulings, and be forthright about what is reasonable and attainable.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SERVICES -->
+  <section class="band services" id="services">
+    <div class="wrap">
+      <div class="head" id="servicesHead">
+        <div>
+          <p class="eyebrow">Services</p>
+          <h2>Every tax question. <em>One point of contact.</em></h2>
+        </div>
+        <p>One team covers the full tax lifecycle — from routine filing to representation before tribunals. Select any practice area to see what an engagement covers.</p>
+      </div>
+      <div class="svc-list" id="svcList"></div>
+    </div>
+  </section>
+
+  <!-- WHY INTELLI -->
+  <section class="band why" id="why">
+    <div class="wrap why-grid">
+      <div class="why-intro" id="whyIntro">
+        <span class="eyebrow">Why Intelli</span>
+        <h2>Why clients stay <em>well past their first filing season.</em></h2>
+        <p>Five reasons our clients keep coming back.</p>
+      </div>
+      <ul class="reasons" id="reasons">
+        <li><h3>Single window</h3><p>One tax and accounting provider for every filing, review and representation you need.</p></li>
+        <li><h3>Diverse client base</h3><p>Depth across defence, textiles, skincare, real estate, hospitality, F&amp;B and technology.</p></li>
+        <li><h3>Timelines &amp; cost</h3><p>Our hallmark is meeting every deadline without inflating the bill.</p></li>
+        <li><h3>Embedded partnership</h3><p>We work as an extension of your own team, protecting your interests with diligence.</p></li>
+        <li><h3>Personal, national reach</h3><p>Based in New Delhi, serving clients across India — with the same partners on every engagement, wherever the work is.</p></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- INDUSTRIES -->
+  <section class="band industries" id="industries">
+    <div class="wrap">
+      <div class="head" id="industriesHead">
+        <div>
+          <p class="eyebrow">Industries served</p>
+          <h2>Depth across <em>sectors.</em></h2>
+        </div>
+        <p>Manufacturing, consumer, real estate and technology — a breadth few boutique practices carry.</p>
+      </div>
+      <div class="sectors" id="sectors">
+        <div class="sector"><h3>Defence</h3><span class="eyebrow">Regulatory &amp; compliance advisory</span></div>
+        <div class="sector"><h3>Textile manufacturing</h3><span class="eyebrow">GST, incentives &amp; export compliance</span></div>
+        <div class="sector"><h3>Skincare &amp; FMCG</h3><span class="eyebrow">Direct tax &amp; transaction advisory</span></div>
+        <div class="sector"><h3>Real estate</h3><span class="eyebrow">Structuring &amp; litigation support</span></div>
+        <div class="sector"><h3>Hospitality &amp; heritage hotels</h3><span class="eyebrow">Compliance &amp; tax review</span></div>
+        <div class="sector"><h3>F&amp;B &amp; coffee manufacturing</h3><span class="eyebrow">Indirect tax &amp; audits</span></div>
+        <div class="sector"><h3>Technology &amp; platforms</h3><span class="eyebrow">Advisory &amp; due diligence</span></div>
+        <div class="sector"><h3>Consumer &amp; retail start-ups</h3><span class="eyebrow">End-to-end compliance</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ENGAGEMENT MODEL -->
+  <section class="band method" id="method">
+    <div class="wrap">
+      <div class="head" id="methodHead">
+        <div>
+          <p class="eyebrow">Engagement model</p>
+          <h2>How we work <em>with clients.</em></h2>
+        </div>
+        <p>Every engagement follows the same four stages, so you always know what's done, what's pending, and who is responsible.</p>
+      </div>
+      <div class="steps" id="steps">
+        <div class="step"><span class="n">1</span><h3>Understand</h3><p>We scope the business, existing filings and risk areas in a working session with the partners.</p><span class="eyebrow when">Week 1</span></div>
+        <div class="step"><span class="n">2</span><h3>Diagnose</h3><p>Due diligence and health checks find gaps and exposure before they become notices.</p><span class="eyebrow when">Weeks 2–3</span></div>
+        <div class="step"><span class="n">3</span><h3>Execute</h3><p>Ongoing compliance, filings and advisory delivered on a fixed monthly schedule, always on time.</p><span class="eyebrow when">Continuous</span></div>
+        <div class="step"><span class="n">4</span><h3>Represent</h3><p>We appear before tax authorities and tribunals whenever notices or disputes arise.</p><span class="eyebrow when">As needed</span></div>
+      </div>
+      <p class="embed-note" id="methodNote">An embedded extension of your finance team — not an outside vendor — with one partner-level point of contact throughout.</p>
+    </div>
+  </section>
+
+  <!-- LEADERSHIP -->
+  <section class="band leaders" id="partners">
+    <div class="wrap">
+      <div class="head" id="partnersHead">
+        <div>
+          <p class="eyebrow">Leadership</p>
+          <h2>Meet <em>our partners.</em></h2>
+        </div>
+        <p>Two Chartered Accountants with more than ten years each at Big 4 firms, and a founding partner on every engagement.</p>
+      </div>
+      <div class="leader-grid" id="leaderGrid">
+        <article class="leader">
+          <img src="assets/img/partners/ankit-aggarwal.jpg" alt="Portrait of Ankit Aggarwal" width="200" height="250">
+          <div>
+            <span class="eyebrow">Founding partner · Direct &amp; international tax</span>
+            <h3>Ankit Aggarwal</h3>
+            <ul>
+              <li>Chartered Accountant · PGDM Finance</li>
+              <li>Ex Big 4 · 10+ years across direct and international tax</li>
+              <li>Leads corporate tax structuring, transfer pricing and cross-border advisory</li>
+              <li>Advises listed companies and high-growth founders</li>
+            </ul>
+            <a class="li" href="https://www.linkedin.com/in/caankit1410/" target="_blank" rel="noopener">LinkedIn profile <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 12L12 4M5 4h7v7"/></svg></a>
+          </div>
+        </article>
+        <article class="leader">
+          <img src="assets/img/partners/mohit-gupta.jpg" alt="Portrait of Mohit Gupta" width="200" height="250">
+          <div>
+            <span class="eyebrow">Founding partner · GST &amp; litigation</span>
+            <h3>Mohit Gupta</h3>
+            <ul>
+              <li>Chartered Accountant</li>
+              <li>Ex Big 4 Manager, Indirect Tax · 10+ years' experience</li>
+              <li>Leads GST advisory, indirect tax audits and litigation strategy</li>
+              <li>Represents clients before tax authorities and tribunals</li>
+            </ul>
+            <a class="li" href="https://www.linkedin.com/in/mohit-gupta-b2a760ba/" target="_blank" rel="noopener">LinkedIn profile <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 12L12 4M5 4h7v7"/></svg></a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLIENTS & TESTIMONIALS -->
+  <section class="band voices" id="clients">
+    <div class="wrap">
+      <div class="head" id="clientsHead">
+        <div>
+          <p class="eyebrow">Major clients</p>
+          <h2>Trusted by 100+ businesses, <em>including listed companies.</em></h2>
+        </div>
+        <p>A selection of the companies we advise, from national brands to fast-growing start-ups.</p>
+      </div>
+      <div class="logos" id="logos"></div>
+
+      <p class="eyebrow" id="voicesEyebrow" style="color:var(--ash);margin-bottom:40px">What clients say</p>
+      <div class="voice-stage">
+        <div>
+          <span class="quote-mark" aria-hidden="true">“</span>
+          <blockquote id="quote" aria-live="polite"></blockquote>
+        </div>
+        <div class="voice-nav" role="tablist" id="voiceNav"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- INSIGHTS -->
+  <section class="band insights" id="insights">
+    <div class="wrap">
+      <div class="head" id="insightsHead">
+        <div>
+          <p class="eyebrow">Insights</p>
+          <h2>Notes from <em>the practice.</em></h2>
+        </div>
+        <p>Plain-language briefings on the changes that affect Indian businesses and taxpayers.</p>
+      </div>
+      <div class="posts" id="posts">
+        <a class="post" href="#insights">
+          <div class="meta"><span class="eyebrow">GST · Sec. 16</span><span class="eyebrow">8 min</span></div>
+          <h3>Input Tax Credit (ITC) eligibility under GST</h3>
+          <p>The four conditions every claim must satisfy, the blocked credits under Section 17(5), and how to reconcile against GSTR-2B before you file.</p>
+          <span class="read">Read the briefing <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M9 3l5 5-5 5"/></svg></span>
+        </a>
+        <a class="post" href="#insights">
+          <div class="meta"><span class="eyebrow">Income Tax</span><span class="eyebrow">5 min</span></div>
+          <h3>Old vs. new regime: choosing for FY 2026–27</h3>
+          <p>Where deductions still win, and where the new slabs quietly come out ahead.</p>
+          <span class="read">Read the briefing <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M9 3l5 5-5 5"/></svg></span>
+        </a>
+        <a class="post" href="#insights">
+          <div class="meta"><span class="eyebrow">Notices</span><span class="eyebrow">6 min</span></div>
+          <h3>Received a notice under Sec. 143(2)? Start here.</h3>
+          <p>What scrutiny means, the timelines that matter, and the documents to gather first.</p>
+          <span class="read">Read the briefing <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M9 3l5 5-5 5"/></svg></span>
+        </a>
+      </div>
+      <p class="more-link" id="allInsights" hidden><a href="insights.html">All insights <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 8h12M9 3l5 5-5 5"/></svg></a></p>
+    </div>
+  </section>
+
+  <!-- CONTACT -->
+  <section class="band contact" id="contact">
+    <div class="wrap contact-grid">
+      <div>
+        <span class="eyebrow" id="contactEyebrow">Contact</span>
+        <h2 id="contactTitle">Let's make tax <em>the quiet part</em> of your year.</h2>
+        <div class="details">
+          <div class="detail-row"><span class="eyebrow">Email</span><span class="v" id="vEmail">Info@IntelliTaxAdvisors.com</span><button class="copy" data-copy="vEmail">Copy</button></div>
+          <div class="detail-row"><span class="eyebrow">Phone</span><span class="v" id="vPhone">+91 99997 94546</span><button class="copy" data-copy="vPhone">Copy</button></div>
+          <div class="detail-row"><span class="eyebrow">Office</span><span class="v" id="vAddr">A-21, Gulmohar Park, New Delhi 110049, India</span><button class="copy" data-copy="vAddr">Copy</button></div>
+          <div class="detail-row"><span class="eyebrow">Hours</span><span class="v" id="vHours">Mon–Sat, 10:00–19:00 IST</span><span></span></div>
+        </div>
+        <ul class="reach" id="reach">
+          <li>A free scoping call before any engagement</li>
+          <li>Direct access to a founding partner, not a junior associate</li>
+          <li>A response within one business day, every time</li>
+        </ul>
+      </div>
+      <form id="enquiry" novalidate>
+        <div class="field"><label for="f-name">Full name</label><input id="f-name" name="name" required placeholder="Your name" autocomplete="name"></div>
+        <div class="field"><label for="f-company">Company</label><input id="f-company" name="company" placeholder="Optional" autocomplete="organization"></div>
+        <div class="field"><label for="f-email">Email</label><input id="f-email" name="email" type="email" required placeholder="you@company.com" autocomplete="email"></div>
+        <div class="field"><label for="f-phone">Phone</label><input id="f-phone" name="phone" type="tel" placeholder="+91" autocomplete="tel"></div>
+        <div class="field full"><label for="f-topic">What do you need help with?</label>
+          <select id="f-topic" name="topic">
+            <option>Direct tax &amp; corporate advisory</option>
+            <option>Tax advisory &amp; planning</option>
+            <option>GST &amp; indirect tax</option>
+            <option>Bookkeeping &amp; accounting</option>
+            <option>Start-up &amp; business advisory</option>
+            <option>Notice, scrutiny or litigation</option>
+            <option>GST / Customs incentives</option>
+            <option>Due diligence</option>
+            <option>Compliance health check</option>
+            <option>Something else</option>
+          </select>
+        </div>
+        <div class="field full"><label for="f-msg">A few details</label><textarea id="f-msg" name="message" placeholder="Entity type, turnover band, and the deadline you're working to."></textarea></div>
+        <div class="hp" aria-hidden="true"><label for="f-website">Website</label><input id="f-website" name="website" tabindex="-1" autocomplete="off"></div>
+        <div class="form-foot">
+          <small id="formNote" aria-live="polite">A partner replies within one business day. Everything you share is held in confidence.</small>
+          <button class="btn btn-light" type="submit" id="submitBtn">Request a call
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><path d="M2 8h12M9 3l5 5-5 5"/></svg></button>
+        </div>
+      </form>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <div class="wrap">
+    <p class="wordmark" aria-hidden="true">Intelli<em>.</em></p>
+    <div class="foot-row">
+      <span id="footCopy">© 2026 Intelli Tax Advisors LLP · New Delhi</span>
+      <nav>
+        <a id="lnInstagram" href="https://www.instagram.com/intellitaxadvisors" target="_blank" rel="noopener">Instagram</a>
+        <a id="lnLinkedin" href="https://www.linkedin.com/search/results/all/?keywords=Intelli%20Tax%20Advisors" target="_blank" rel="noopener">LinkedIn</a>
+        <a href="#top">Privacy</a>
+        <a href="#top">Accessibility</a>
+      </nav>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="assets/js/config.js"></script>
+<script src="assets/js/content.js"></script>
+<script src="assets/js/api.js"></script>
+<script src="assets/js/calendar.js"></script>
+<script src="assets/js/main.js"></script>
+</body>
+</html>
