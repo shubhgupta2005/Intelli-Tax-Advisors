@@ -7,7 +7,9 @@ The design matches the original single-file page, which is kept at `reference/or
 
 ```
 index.html              Home page
+insights.html           All published insights, filterable by topic
 post.html               Insight article page (post.html?slug=…)
+admin/                  Admin portal (admin/index.html) and compliance calendar editor (admin/calendar.html)
 assets/css/styles.css   All styles
 assets/js/config.js     Supabase URL + anon key (fill in)
 assets/js/content.js    Built-in content; fallback when Supabase is off or unreachable
@@ -17,6 +19,8 @@ assets/js/main.js       Page behaviour and rendering
 assets/img/             Partner photos and client logos
 supabase/schema.sql     Tables, Row Level Security, storage bucket
 supabase/seed.sql       Initial content (generated from content.js)
+supabase/002_admin_portal.sql         Page sections table, scheduled posts, media limits
+supabase/003_compliance_calendar.sql  Compliance calendar overrides
 ```
 
 ## Set up Supabase
@@ -37,13 +41,33 @@ With the config left empty, the site runs on the built-in content and the contac
 | `partners`      | Leadership cards                                       |
 | `clients`       | Client logo wall                                       |
 | `testimonials`  | "What clients say" carousel                            |
-| `insights`      | Homepage insight cards (first three) and article pages |
+| `insights`      | Blog: homepage cards (newest three), insights.html and article pages |
+| `page_sections` | Page copy: hero, figures, about, section headings, why Intelli, engagement model, contact, footer, SEO |
 | `compliance_dates` | Changes to the homepage compliance calendar (extensions, hidden or extra dates) |
 | `enquiries`     | Contact-form submissions                               |
 
 Content tables share `sort_order` (ascending) and `is_published`. Insight `body` is Markdown; a card only links to its article page once it has a body.
 
-The hero, figures strip, about, "why Intelli" and engagement-model sections are static HTML in `index.html`. The compliance calendar's routine due dates are generated in the browser (India time) by `assets/js/calendar.js`; rows in `compliance_dates` override them. Edit those at `admin/calendar.html` — e.g. when CBDT extends the tax-audit date, change `Tax audit report` to the new date there.
+Page copy lives in `page_sections` (one JSON document per section); `index.html` holds the same text as a fallback, so the page never flashes empty. The compliance calendar's routine due dates are generated in the browser (India time) by `assets/js/calendar.js`; rows in `compliance_dates` override them. Edit those at `admin/calendar.html` — e.g. when CBDT extends the tax-audit date, change `Tax audit report` to the new date there.
+
+## Admin portal
+
+Open `/admin/` on the deployed site (or http://localhost:8080/admin/ locally) and sign in with your admin account.
+
+| Section          | What you can do |
+|------------------|-----------------|
+| Dashboard        | New enquiries, recent posts, quick links |
+| Enquiries        | Read form submissions, set status (new → contacted → in progress → closed / spam), add private notes, reply by email, export CSV |
+| Insights & blog  | Write posts in Markdown with live preview; upload, paste or drag images in; save drafts, schedule a future publish date, publish, unpublish |
+| Services, Industries, Partners, Client logos, Testimonials | Add, edit, delete, reorder (↑ ↓), show/hide on the site |
+| Page sections    | Edit every piece of homepage text; "Restore original text" puts the launch copy back |
+| Compliance calendar | Correct or hide built-in due dates, add one-off dates (`admin/calendar.html`) |
+| Media library    | Upload images/PDFs (10 MB max), copy URLs, delete files |
+| Settings         | Contact details, social links, "more clients" tile, change password, see admins |
+
+In headings, wrap words in `*asterisks*` to set them in italic, as in the original design.
+
+**Password reset emails:** in Supabase → *Authentication → URL Configuration*, set the Site URL to your domain and add `https://your-domain/admin/` (and `http://localhost:8080/admin/` for local use) to the redirect URLs.
 
 ## Security model (for the admin portal)
 
