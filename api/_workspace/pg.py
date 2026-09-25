@@ -191,7 +191,8 @@ def connect(search_path):
     """One reused connection per thread (serverless instances stay warm between requests)."""
     raw = getattr(_local, "raw", None)
     if raw is None or raw.closed or raw.broken:
-        url = os.environ.get("DATABASE_URL")
+        # Pasted values often carry a trailing newline/space or quotes; none of those belong in a connection URL.
+        url = (os.environ.get("DATABASE_URL") or "").strip().strip('"').strip("'").strip()
         if not url:
             raise RuntimeError("DATABASE_URL is not set")
         raw = psycopg.connect(url, prepare_threshold=None, connect_timeout=10)
@@ -286,7 +287,9 @@ def explain(e):
     if "WorkDesk isn't set up" in msg:
         return msg
     if isinstance(e, psycopg.OperationalError):
-        return "Couldn't connect to the database with DATABASE_URL: " + msg.strip().splitlines()[-1][:200]
+        detail = " ".join(msg.split())
+        detail = detail[detail.find("FATAL"):] if "FATAL" in detail else detail
+        return "Couldn't connect to the database with DATABASE_URL: " + detail[:300]
     return "Server startup failed: " + msg[:200]
 
 

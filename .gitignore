@@ -7,3 +7,7 @@ Thumbs.db
 
 # Local WorkDesk / expense-tracker source: contains real bank statements, receipts and databases
 test-work-main/
+
+# Python
+__pycache__/
+*.pyc
