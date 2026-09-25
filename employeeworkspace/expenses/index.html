@@ -1,0 +1,2069 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta name="robots" content="noindex, nofollow">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ExpenseFlow · Intelli Workspace</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    * { font-family: 'Inter', sans-serif; }
+    :root {
+      --brand: #6366f1;
+      --brand-dark: #4f46e5;
+    }
+    .sidebar-link { transition: all .18s; }
+    .sidebar-link:hover, .sidebar-link.active { background: rgba(99,102,241,.15); color: #818cf8; }
+    .sidebar-link.active { border-left: 3px solid #6366f1; }
+    .glass { background: rgba(255,255,255,.03); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,.08); }
+    .card { background: #1e1f2e; border: 1px solid rgba(255,255,255,.06); border-radius: 16px; }
+    .card-hover { transition: transform .2s, box-shadow .2s; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,.4); }
+    .badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 999px; font-size: .72rem; font-weight: 600; }
+    .btn-primary { background: linear-gradient(135deg,#6366f1,#8b5cf6); color: #fff; border-radius: 10px; padding: 8px 18px; font-weight: 600; transition: all .18s; }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,.45); }
+    .btn-ghost { color: #9ca3af; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; padding: 8px 18px; font-weight: 500; transition: all .18s; }
+    .btn-ghost:hover { background: rgba(255,255,255,.06); color: #e5e7eb; }
+    .btn-danger { background: rgba(239,68,68,.15); color: #f87171; border: 1px solid rgba(239,68,68,.25); border-radius: 10px; padding: 6px 14px; font-weight: 500; transition: all .18s; }
+    .btn-danger:hover { background: rgba(239,68,68,.25); }
+    input, select, textarea { background: #2a2b3d !important; border: 1px solid rgba(255,255,255,.1) !important; color: #e5e7eb !important; border-radius: 10px !important; padding: 10px 14px !important; transition: border-color .18s; }
+    input:focus, select:focus, textarea:focus { outline: none !important; border-color: #6366f1 !important; box-shadow: 0 0 0 3px rgba(99,102,241,.18) !important; }
+    input::placeholder, textarea::placeholder { color: #6b7280 !important; }
+    .modal-bg { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
+    .modal-box { background: #1e1f2e; border: 1px solid rgba(255,255,255,.1); border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+    .stat-card { background: linear-gradient(135deg, #1e1f2e 0%, #252640 100%); border: 1px solid rgba(255,255,255,.07); border-radius: 16px; }
+    .table-row:hover { background: rgba(255,255,255,.03); }
+    .drop-zone { border: 2px dashed rgba(99,102,241,.4); border-radius: 12px; transition: all .18s; }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: #6366f1; background: rgba(99,102,241,.08); }
+    .tag { background: rgba(99,102,241,.18); color: #a5b4fc; border-radius: 6px; padding: 2px 8px; font-size: .72rem; font-weight: 500; }
+    .progress-bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 999px; transition: width .6s ease; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 3px; }
+    .tooltip { position: relative; }
+    .tooltip:hover::after { content: attr(data-tip); position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: #374151; color: #f9fafb; padding: 4px 10px; border-radius: 6px; font-size: .72rem; white-space: nowrap; z-index: 9999; }
+    .shine { background: linear-gradient(90deg,transparent,rgba(255,255,255,.05),transparent); background-size: 200% 100%; animation: shine 2s infinite; }
+    @keyframes shine { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .fade-in { animation: fadeIn .3s ease; }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .spinner { width:20px;height:20px;border:2px solid rgba(255,255,255,.2);border-top-color:#6366f1;border-radius:50%;animation:spin .7s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .notification { position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-weight:500;font-size:.875rem;box-shadow:0 8px 30px rgba(0,0,0,.4);animation:slideIn .3s ease; }
+    @keyframes slideIn { from{transform:translateX(120%)} to{transform:translateX(0)} }
+    .notification.success { background:#065f46;border:1px solid #10b981;color:#6ee7b7; }
+    .notification.error { background:#7f1d1d;border:1px solid #ef4444;color:#fca5a5; }
+    .notification.info { background:#1e3a5f;border:1px solid #3b82f6;color:#93c5fd; }
+    select option { background: #1e1f2e; }
+
+    /* Import wizard step indicator */
+    .import-step-indicator { display:flex;flex-direction:column;align-items:center;gap:6px;min-width:80px; }
+    .step-circle { width:32px;height:32px;border-radius:50%;border:2px solid rgba(255,255,255,.1);background:#1e1f2e;color:#6b7280;font-size:.8rem;font-weight:700;display:flex;align-items:center;justify-content:center;transition:all .3s; }
+    .step-label { font-size:.7rem;color:#6b7280;font-weight:500;white-space:nowrap;transition:color .3s; }
+    .import-step-indicator.active .step-circle { border-color:#6366f1;background:rgba(99,102,241,.2);color:#818cf8; }
+    .import-step-indicator.active .step-label { color:#818cf8; }
+    .import-step-indicator.done .step-circle { border-color:#10b981;background:rgba(16,185,129,.2);color:#10b981; }
+    .import-step-indicator.done .step-label { color:#10b981; }
+
+    /* Confidence bar */
+    .conf-bar { height:4px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;width:60px; }
+    .conf-fill { height:100%;border-radius:999px; }
+
+    /* Import row highlight */
+    .import-row.debit td:last-child { color:#f87171; }
+    .import-row.credit td:last-child { color:#34d399; }
+    .import-row.unchecked { opacity:.45; }
+
+    /* Inline editable cell */
+    .editable-cell { background:transparent;border:none;color:#e5e7eb;width:100%;font-size:.75rem;padding:2px 4px;border-radius:6px;transition:background .15s; }
+    .editable-cell:focus { background:#2a2b3d;outline:none; }
+    .editable-select { background:#1e1f2e !important;border:none !important;color:#e5e7eb !important;font-size:.75rem !important;padding:2px 4px !important;border-radius:6px !important;width:100%;cursor:pointer; }
+    .editable-select:focus { background:#2a2b3d !important;outline:none !important; }
+  </style>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: '#6366f1',
+            surface: '#1e1f2e',
+            'surface-2': '#252640',
+            border: 'rgba(255,255,255,0.08)'
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#13141f] text-gray-200 h-full min-h-screen flex">
+
+<!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════════════ -->
+<aside id="sidebar" class="w-64 min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[#16172a] border-r border-white/5">
+  <!-- Logo -->
+  <div class="px-6 py-5 flex items-center gap-3 border-b border-white/5">
+    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
+      <i class="fas fa-chart-line text-white text-sm"></i>
+    </div>
+    <div>
+      <div class="font-bold text-white text-[15px] leading-tight">ExpenseFlow</div>
+      <div class="text-xs text-gray-500">Company Tracker</div>
+    </div>
+  </div>
+  <a href="/employeeworkspace/" class="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5"><i class="fas fa-arrow-left w-4 text-center"></i> Back to WorkDesk</a>
+
+  <!-- Nav -->
+  <nav class="flex-1 px-3 py-4 space-y-1">
+    <div class="text-xs font-semibold text-gray-600 uppercase tracking-widest px-3 mb-2">Main</div>
+    <a href="#" onclick="nav('dashboard')" data-page="dashboard" class="sidebar-link active flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 cursor-pointer">
+      <i class="fas fa-th-large w-4 text-center"></i> Dashboard
+    </a>
+    <a href="#" onclick="nav('expenses')" data-page="expenses" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 cursor-pointer">
+      <i class="fas fa-receipt w-4 text-center"></i> Expenses
+    </a>
+    <a href="#" onclick="nav('projects')" data-page="projects" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 cursor-pointer">
+      <i class="fas fa-folder-open w-4 text-center"></i> Projects
+    </a>
+    <a href="#" onclick="nav('categories')" data-page="categories" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 cursor-pointer">
+      <i class="fas fa-tag w-4 text-center"></i> Categories
+    </a>
+    <a href="#" onclick="nav('import')" data-page="import" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 cursor-pointer">
+      <i class="fas fa-file-import w-4 text-center"></i> Import
+      <span class="ml-auto badge bg-indigo-500/20 text-indigo-300 text-[10px]">Bank</span>
+    </a>
+    <div class="text-xs font-semibold text-gray-600 uppercase tracking-widest px-3 mb-2 mt-5">System</div>
+    <a href="#" onclick="nav('api')" data-page="api" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 cursor-pointer">
+      <i class="fas fa-key w-4 text-center"></i> API Keys
+    </a>
+    <a href="#" onclick="nav('reports')" data-page="reports" class="sidebar-link flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm text-gray-300 cursor-pointer">
+      <i class="fas fa-chart-bar w-4 text-center"></i> Reports
+    </a>
+  </nav>
+
+  <!-- Status -->
+  <div class="px-4 py-4 border-t border-white/5">
+    <div id="api-status" class="flex items-center gap-2 text-xs text-gray-500">
+      <span class="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></span>
+      Connecting…
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN CONTENT ══════════════════════════════════════════════════════════ -->
+<main class="ml-64 flex-1 min-h-screen flex flex-col">
+
+  <!-- Top bar -->
+  <header class="sticky top-0 z-30 h-16 flex items-center justify-between px-8 bg-[#13141f]/90 backdrop-blur border-b border-white/5">
+    <div class="flex items-center gap-3">
+      <h1 id="page-title" class="text-xl font-bold text-white">Dashboard</h1>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="relative">
+        <input id="global-search" type="text" placeholder="Search expenses…" class="w-64 text-sm pl-9 pr-4 py-2 !rounded-xl" oninput="globalSearch(this.value)" />
+        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
+      </div>
+      <button onclick="openExpenseModal()" class="btn-primary flex items-center gap-2 text-sm">
+        <i class="fas fa-plus text-xs"></i> Add Expense
+      </button>
+    </div>
+  </header>
+
+  <!-- Page content -->
+  <div class="flex-1 p-8">
+
+    <!-- ── DASHBOARD ── -->
+    <section id="page-dashboard" class="fade-in">
+      <!-- Period selector -->
+      <div class="flex items-center justify-between mb-6">
+        <div class="flex gap-2">
+          <button onclick="setPeriod(7)" class="period-btn btn-ghost text-sm py-1.5 px-4">7d</button>
+          <button onclick="setPeriod(30)" class="period-btn btn-ghost text-sm py-1.5 px-4 active-period">30d</button>
+          <button onclick="setPeriod(90)" class="period-btn btn-ghost text-sm py-1.5 px-4">90d</button>
+          <button onclick="setPeriod(365)" class="period-btn btn-ghost text-sm py-1.5 px-4">1yr</button>
+        </div>
+        <span class="text-sm text-gray-500">Auto-refreshes every 30s</span>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="grid grid-cols-4 gap-4 mb-6">
+        <div class="stat-card p-5 card-hover">
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center"><i class="fas fa-dollar-sign text-indigo-400"></i></div>
+            <span id="stat-change-total" class="badge bg-green-500/15 text-green-400">—</span>
+          </div>
+          <div id="stat-total" class="text-2xl font-bold text-white mb-1">$0</div>
+          <div class="text-xs text-gray-500">Period Total Spend</div>
+        </div>
+        <div class="stat-card p-5 card-hover">
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center"><i class="fas fa-receipt text-purple-400"></i></div>
+          </div>
+          <div id="stat-count" class="text-2xl font-bold text-white mb-1">0</div>
+          <div class="text-xs text-gray-500">Expenses in Period</div>
+        </div>
+        <div class="stat-card p-5 card-hover">
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center"><i class="fas fa-folder text-blue-400"></i></div>
+          </div>
+          <div id="stat-projects" class="text-2xl font-bold text-white mb-1">0</div>
+          <div class="text-xs text-gray-500">Active Projects</div>
+        </div>
+        <div class="stat-card p-5 card-hover">
+          <div class="flex items-start justify-between mb-3">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center"><i class="fas fa-wallet text-emerald-400"></i></div>
+          </div>
+          <div id="stat-all-time" class="text-2xl font-bold text-white mb-1">$0</div>
+          <div class="text-xs text-gray-500">All-Time Total</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="grid grid-cols-5 gap-4 mb-6">
+        <div class="col-span-3 card p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-white">Monthly Spend Trend</h3>
+            <span class="text-xs text-gray-500">Last 12 months</span>
+          </div>
+          <canvas id="chart-trend" height="200"></canvas>
+        </div>
+        <div class="col-span-2 card p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-white">By Category</h3>
+          </div>
+          <canvas id="chart-category" height="200"></canvas>
+        </div>
+      </div>
+
+      <!-- Bottom row -->
+      <div class="grid grid-cols-5 gap-4">
+        <!-- Recent expenses -->
+        <div class="col-span-3 card p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-white">Recent Expenses</h3>
+            <button onclick="nav('expenses')" class="text-xs text-indigo-400 hover:text-indigo-300">View all →</button>
+          </div>
+          <div id="recent-expenses-list" class="space-y-3"></div>
+        </div>
+        <!-- Project budgets -->
+        <div class="col-span-2 card p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="font-semibold text-white">Project Budgets</h3>
+            <button onclick="nav('projects')" class="text-xs text-indigo-400 hover:text-indigo-300">Manage →</button>
+          </div>
+          <div id="project-budgets-list" class="space-y-4"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── EXPENSES ── -->
+    <section id="page-expenses" class="fade-in hidden">
+      <!-- Filters -->
+      <div class="card p-4 mb-5">
+        <div class="grid grid-cols-6 gap-3">
+          <select id="filter-project" onchange="loadExpenses()" class="text-sm">
+            <option value="">All Projects</option>
+          </select>
+          <select id="filter-category" onchange="loadExpenses()" class="text-sm">
+            <option value="">All Categories</option>
+          </select>
+          <select id="filter-status" onchange="loadExpenses()" class="text-sm">
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="reimbursed">Reimbursed</option>
+          </select>
+          <input id="filter-date-from" type="date" onchange="loadExpenses()" class="text-sm" />
+          <input id="filter-date-to" type="date" onchange="loadExpenses()" class="text-sm" />
+          <button onclick="clearFilters()" class="btn-ghost text-sm">Clear</button>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card overflow-hidden">
+        <div class="flex items-center justify-between p-5 border-b border-white/5">
+          <div class="flex items-center gap-3">
+            <h3 class="font-semibold text-white">Expenses</h3>
+            <span id="expense-count-badge" class="badge bg-indigo-500/20 text-indigo-300">0</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="selected-total" class="text-sm text-gray-500 hidden"></span>
+            <button onclick="bulkDelete()" id="btn-bulk-delete" class="btn-danger text-sm hidden">Delete Selected</button>
+            <button onclick="openExpenseModal()" class="btn-primary flex items-center gap-2 text-sm">
+              <i class="fas fa-plus text-xs"></i> New Expense
+            </button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-white/5 text-xs text-gray-500 uppercase tracking-wide">
+                <th class="text-left px-5 py-3 w-8"><input type="checkbox" id="select-all" onchange="selectAll(this)" class="!p-0 !rounded !w-4 !h-4" /></th>
+                <th class="text-left px-5 py-3">Title</th>
+                <th class="text-left px-3 py-3">Project</th>
+                <th class="text-left px-3 py-3">Category</th>
+                <th class="text-left px-3 py-3">Date</th>
+                <th class="text-left px-3 py-3">Vendor</th>
+                <th class="text-left px-3 py-3">Status</th>
+                <th class="text-right px-5 py-3">Amount</th>
+                <th class="text-center px-3 py-3">Files</th>
+                <th class="text-center px-3 py-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="expense-table-body" class="divide-y divide-white/5"></tbody>
+          </table>
+        </div>
+        <div class="p-5 border-t border-white/5 flex items-center justify-between">
+          <span id="expense-table-info" class="text-xs text-gray-500"></span>
+          <div class="flex items-center gap-2">
+            <button id="btn-prev" onclick="changePage(-1)" class="btn-ghost text-xs py-1.5 px-3">← Prev</button>
+            <span id="page-info" class="text-xs text-gray-500"></span>
+            <button id="btn-next" onclick="changePage(1)" class="btn-ghost text-xs py-1.5 px-3">Next →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PROJECTS ── -->
+    <section id="page-projects" class="fade-in hidden">
+      <div class="flex items-center justify-between mb-5">
+        <div></div>
+        <button onclick="openProjectModal()" class="btn-primary flex items-center gap-2 text-sm">
+          <i class="fas fa-plus text-xs"></i> New Project
+        </button>
+      </div>
+      <div id="projects-grid" class="grid grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- ── CATEGORIES ── -->
+    <section id="page-categories" class="fade-in hidden">
+      <div class="flex items-center justify-between mb-5">
+        <div></div>
+        <button onclick="openCategoryModal()" class="btn-primary flex items-center gap-2 text-sm">
+          <i class="fas fa-plus text-xs"></i> New Category
+        </button>
+      </div>
+      <div id="categories-grid" class="grid grid-cols-4 gap-4"></div>
+    </section>
+
+    <!-- ── API KEYS ── -->
+    <section id="page-api" class="fade-in hidden">
+      <div class="grid grid-cols-2 gap-6">
+        <div>
+          <div class="card p-5 mb-5">
+            <h3 class="font-semibold text-white mb-1">API Documentation</h3>
+            <p class="text-xs text-gray-500 mb-4">Base URL: <code class="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded text-xs" id="api-base-url">https://intellitaxadvisors.com/employeeworkspace/expenses</code></p>
+            <div class="space-y-3 text-xs">
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-green-400 font-mono mb-1">GET /api/expenses</div>
+                <div class="text-gray-500">List expenses. Params: project_id, category_id, status, date_from, date_to, search, limit, offset</div>
+              </div>
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-blue-400 font-mono mb-1">POST /api/expenses</div>
+                <div class="text-gray-500">Create expense. Body: {title, amount, date, project_id, category_id, ...}</div>
+              </div>
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-yellow-400 font-mono mb-1">PUT /api/expenses/:id</div>
+                <div class="text-gray-500">Update expense fields</div>
+              </div>
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-red-400 font-mono mb-1">DELETE /api/expenses/:id</div>
+                <div class="text-gray-500">Delete expense and all attachments</div>
+              </div>
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-green-400 font-mono mb-1">GET /api/dashboard?period=30</div>
+                <div class="text-gray-500">Full analytics summary</div>
+              </div>
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-blue-400 font-mono mb-1">POST /api/expenses/:id/attachments</div>
+                <div class="text-gray-500">Upload file attachment (multipart/form-data, field: file)</div>
+              </div>
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-green-400 font-mono mb-1">GET /api/projects, /api/categories</div>
+                <div class="text-gray-500">CRUD for projects and categories</div>
+              </div>
+              <div class="bg-[#13141f] rounded-lg p-3">
+                <div class="text-indigo-400 font-mono mb-1">Header: X-API-Key: &lt;key&gt;</div>
+                <div class="text-gray-500">Pass API key for authenticated access from external systems</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card p-5 mb-4">
+            <div class="flex items-center justify-between mb-4">
+              <h3 class="font-semibold text-white">API Keys</h3>
+              <button onclick="openKeyModal()" class="btn-primary text-sm flex items-center gap-2">
+                <i class="fas fa-plus text-xs"></i> Generate Key
+              </button>
+            </div>
+            <div id="api-keys-list" class="space-y-3"></div>
+          </div>
+          <div class="card p-5">
+            <h3 class="font-semibold text-white mb-3">Test API</h3>
+            <div class="space-y-3">
+              <select id="test-method" class="text-sm w-full">
+                <option>GET /api/dashboard</option>
+                <option>GET /api/expenses</option>
+                <option>GET /api/projects</option>
+                <option>GET /api/categories</option>
+                <option>GET /api/health</option>
+              </select>
+              <button onclick="testApi()" class="btn-primary text-sm w-full">Run Request</button>
+              <pre id="api-response" class="bg-[#13141f] text-green-400 text-xs p-4 rounded-xl overflow-auto max-h-60 hidden font-mono"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── REPORTS ── -->
+    <section id="page-reports" class="fade-in hidden">
+      <div class="card p-5 mb-5">
+        <div class="grid grid-cols-4 gap-4 items-end">
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">From</label>
+            <input type="date" id="report-from" class="text-sm w-full" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">To</label>
+            <input type="date" id="report-to" class="text-sm w-full" />
+          </div>
+          <div>
+            <label class="text-xs text-gray-500 mb-1 block">Project</label>
+            <select id="report-project" class="text-sm w-full"><option value="">All Projects</option></select>
+          </div>
+          <button onclick="loadReport()" class="btn-primary text-sm">Generate Report</button>
+        </div>
+      </div>
+      <div id="report-output" class="grid grid-cols-3 gap-4">
+        <div class="col-span-3 text-center text-gray-600 py-20">Select a date range and click Generate Report</div>
+      </div>
+    </section>
+
+    <!-- ── IMPORT ── -->
+    <section id="page-import" class="fade-in hidden">
+      <!-- Step indicator -->
+      <div class="flex items-center gap-0 mb-8">
+        <div class="import-step-indicator active" data-step="1">
+          <div class="step-circle">1</div>
+          <div class="step-label">Upload File</div>
+        </div>
+        <div class="step-line flex-1 h-px bg-white/10 mx-2"></div>
+        <div class="import-step-indicator" data-step="2">
+          <div class="step-circle">2</div>
+          <div class="step-label">Review & Edit</div>
+        </div>
+        <div class="step-line flex-1 h-px bg-white/10 mx-2"></div>
+        <div class="import-step-indicator" data-step="3">
+          <div class="step-circle">3</div>
+          <div class="step-label">Import</div>
+        </div>
+      </div>
+
+      <!-- Step 1: Upload -->
+      <div id="import-step-1">
+        <div class="grid grid-cols-3 gap-5 mb-5">
+          <!-- Upload zone -->
+          <div class="col-span-2 card p-6">
+            <h3 class="font-semibold text-white mb-1">Upload Bank Statement</h3>
+            <p class="text-xs text-gray-500 mb-5">Supports CSV exports from all major banks. Download your statement from your bank's portal and upload here.</p>
+            <div id="import-drop-zone" class="drop-zone p-10 text-center cursor-pointer"
+                 onclick="document.getElementById('import-file-input').click()"
+                 ondrop="handleImportDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+              <div class="w-16 h-16 rounded-2xl bg-indigo-500/15 flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-file-csv text-indigo-400 text-3xl"></i>
+              </div>
+              <div class="text-base font-medium text-white mb-1">Drop your bank statement here</div>
+              <div class="text-sm text-gray-500 mb-4">or click to browse</div>
+              <div class="flex items-center justify-center gap-3 flex-wrap">
+                <span class="badge bg-white/5 text-gray-400">CSV</span>
+                <span class="badge bg-white/5 text-gray-400">TSV</span>
+                <span class="badge bg-white/5 text-gray-400">TXT</span>
+              </div>
+              <input type="file" id="import-file-input" class="hidden" accept=".csv,.tsv,.txt" onchange="handleImportFileSelect(event)" />
+            </div>
+            <div id="import-file-info" class="hidden mt-4 flex items-center gap-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-3">
+              <i class="fas fa-file-csv text-indigo-400 text-xl"></i>
+              <div class="flex-1">
+                <div id="import-file-name" class="text-sm font-medium text-white"></div>
+                <div id="import-file-size" class="text-xs text-gray-500"></div>
+              </div>
+              <button onclick="clearImportFile()" class="text-gray-500 hover:text-red-400"><i class="fas fa-times"></i></button>
+            </div>
+          </div>
+
+          <!-- Bank templates + settings -->
+          <div class="space-y-4">
+            <div class="card p-5">
+              <h4 class="font-medium text-white text-sm mb-3">Import Settings</h4>
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Assign to Project</label>
+                  <select id="import-default-project" class="text-sm w-full">
+                    <option value="">No project (assign later)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Default Status</label>
+                  <select id="import-default-status" class="text-sm w-full">
+                    <option value="pending">Pending Review</option>
+                    <option value="approved">Approved</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="text-xs text-gray-500 mb-1 block">Import Tag</label>
+                  <input type="text" id="import-tag" class="text-sm w-full" placeholder="e.g. bank-import-june" />
+                </div>
+              </div>
+            </div>
+            <div class="card p-5">
+              <h4 class="font-medium text-white text-sm mb-3">Sample Templates</h4>
+              <p class="text-xs text-gray-500 mb-3">Download a template matching your bank format to test the import.</p>
+              <div class="space-y-2" id="template-buttons"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex justify-end">
+          <button onclick="runImportPreview()" id="btn-preview" class="btn-primary flex items-center gap-2 text-sm" disabled>
+            <i class="fas fa-search text-xs"></i> Parse & Preview
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 2: Review -->
+      <div id="import-step-2" class="hidden">
+        <!-- Summary bar -->
+        <div class="card p-4 mb-5">
+          <div class="flex items-center gap-6 flex-wrap">
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center"><i class="fas fa-list text-indigo-400 text-xs"></i></div>
+              <div><div id="imp-total" class="font-bold text-white text-sm">0</div><div class="text-xs text-gray-500">Transactions</div></div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center"><i class="fas fa-check text-green-400 text-xs"></i></div>
+              <div><div id="imp-selected" class="font-bold text-white text-sm">0</div><div class="text-xs text-gray-500">Selected</div></div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-purple-500/20 flex items-center justify-center"><i class="fas fa-dollar-sign text-purple-400 text-xs"></i></div>
+              <div><div id="imp-total-amount" class="font-bold text-white text-sm">$0</div><div class="text-xs text-gray-500">Selected Total</div></div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="w-8 h-8 rounded-lg bg-yellow-500/20 flex items-center justify-center"><i class="fas fa-magic text-yellow-400 text-xs"></i></div>
+              <div><div id="imp-auto-cat" class="font-bold text-white text-sm">0</div><div class="text-xs text-gray-500">Auto-Categorized</div></div>
+            </div>
+            <div class="flex items-center gap-2 ml-auto gap-3">
+              <button onclick="importSelectAll(true)" class="btn-ghost text-xs py-1.5 px-3">Select All</button>
+              <button onclick="importSelectAll(false)" class="btn-ghost text-xs py-1.5 px-3">Select Debits Only</button>
+              <div class="relative">
+                <input id="import-search" type="text" placeholder="Filter transactions…" class="text-xs w-48 pl-7 pr-3 !py-2" oninput="filterImportRows(this.value)" />
+                <i class="fas fa-search absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-600 text-xs"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Editable transaction table -->
+        <div class="card overflow-hidden mb-5">
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs">
+              <thead>
+                <tr class="border-b border-white/5 text-gray-500 uppercase tracking-wide">
+                  <th class="text-left px-4 py-3 w-8"><input type="checkbox" id="import-select-all-cb" onchange="importSelectAllCb(this)" class="!p-0 !rounded !w-4 !h-4" /></th>
+                  <th class="text-left px-3 py-3">Date</th>
+                  <th class="text-left px-3 py-3 w-64">Description / Title</th>
+                  <th class="text-left px-3 py-3">Category</th>
+                  <th class="text-left px-3 py-3">Project</th>
+                  <th class="text-left px-3 py-3">Vendor</th>
+                  <th class="text-center px-3 py-3">Type</th>
+                  <th class="text-right px-4 py-3">Amount</th>
+                  <th class="text-center px-3 py-3">Confidence</th>
+                </tr>
+              </thead>
+              <tbody id="import-table-body" class="divide-y divide-white/5"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="flex justify-between">
+          <button onclick="backToUpload()" class="btn-ghost text-sm flex items-center gap-2">
+            <i class="fas fa-arrow-left text-xs"></i> Back
+          </button>
+          <button onclick="confirmImport()" class="btn-primary text-sm flex items-center gap-2">
+            <i class="fas fa-download text-xs"></i> Import Selected Transactions
+          </button>
+        </div>
+      </div>
+
+      <!-- Step 3: Done -->
+      <div id="import-step-3" class="hidden">
+        <div class="card p-12 text-center">
+          <div class="w-20 h-20 rounded-full bg-green-500/20 flex items-center justify-center mx-auto mb-6">
+            <i class="fas fa-check-circle text-green-400 text-4xl"></i>
+          </div>
+          <h3 class="text-2xl font-bold text-white mb-2">Import Complete!</h3>
+          <p id="import-done-msg" class="text-gray-400 mb-8"></p>
+          <div class="flex items-center justify-center gap-4">
+            <button onclick="nav('expenses')" class="btn-primary text-sm flex items-center gap-2">
+              <i class="fas fa-receipt text-xs"></i> View Expenses
+            </button>
+            <button onclick="resetImport()" class="btn-ghost text-sm">Import Another</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /page content -->
+</main>
+
+<!-- ═══ MODALS ════════════════════════════════════════════════════════════════ -->
+
+<!-- Expense Modal -->
+<div id="modal-expense" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="modal-box w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/8">
+      <h2 id="expense-modal-title" class="text-lg font-bold text-white">Add Expense</h2>
+      <button onclick="closeModal('modal-expense')" class="text-gray-500 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="expense-form" onsubmit="saveExpense(event)" class="p-6 space-y-4">
+      <input type="hidden" id="expense-id" />
+      <div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2">
+          <label class="text-xs text-gray-500 mb-1 block">Title *</label>
+          <input type="text" id="exp-title" placeholder="e.g. AWS Invoice July" required class="w-full text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Amount *</label>
+          <div class="flex gap-2">
+            <select id="exp-currency" class="w-24 text-sm">
+              <option>USD</option><option>EUR</option><option>GBP</option><option>INR</option><option>JPY</option><option>CAD</option><option>AUD</option>
+            </select>
+            <input type="number" id="exp-amount" step="0.01" placeholder="0.00" required class="flex-1 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Date *</label>
+          <input type="date" id="exp-date" required class="w-full text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Project</label>
+          <select id="exp-project" class="w-full text-sm"></select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Category</label>
+          <select id="exp-category" class="w-full text-sm"></select>
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Vendor / Payee</label>
+          <input type="text" id="exp-vendor" placeholder="Amazon, Uber, etc." class="w-full text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Paid By</label>
+          <input type="text" id="exp-paid-by" placeholder="Employee name or team" class="w-full text-sm" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Status</label>
+          <select id="exp-status" class="w-full text-sm">
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="reimbursed">Reimbursed</option>
+          </select>
+        </div>
+        <div class="col-span-2">
+          <label class="text-xs text-gray-500 mb-1 block">Description</label>
+          <textarea id="exp-desc" rows="2" placeholder="Optional notes…" class="w-full text-sm resize-none"></textarea>
+        </div>
+        <div class="col-span-2">
+          <label class="text-xs text-gray-500 mb-1 block">Tags (comma separated)</label>
+          <input type="text" id="exp-tags" placeholder="e.g. urgent, q4, travel" class="w-full text-sm" />
+        </div>
+      </div>
+
+      <!-- Attachments -->
+      <div id="attachment-section" class="hidden">
+        <label class="text-xs text-gray-500 mb-2 block">Attachments</label>
+        <div id="drop-zone" class="drop-zone p-6 text-center cursor-pointer" onclick="document.getElementById('file-input').click()" ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+          <i class="fas fa-cloud-upload-alt text-indigo-400 text-2xl mb-2"></i>
+          <div class="text-sm text-gray-400">Drop files here or <span class="text-indigo-400">browse</span></div>
+          <div class="text-xs text-gray-600 mt-1">PDF, images, docs up to 20MB</div>
+          <input type="file" id="file-input" multiple class="hidden" onchange="handleFileSelect(event)" accept=".pdf,.png,.jpg,.jpeg,.gif,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip" />
+        </div>
+        <div id="attachment-list" class="mt-3 space-y-2"></div>
+      </div>
+
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 text-sm flex items-center justify-center gap-2">
+          <span id="save-expense-text">Save Expense</span>
+        </button>
+        <button type="button" onclick="closeModal('modal-expense')" class="btn-ghost flex-1 text-sm">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Project Modal -->
+<div id="modal-project" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="modal-box w-full max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/8">
+      <h2 id="project-modal-title" class="text-lg font-bold text-white">New Project</h2>
+      <button onclick="closeModal('modal-project')" class="text-gray-500 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="project-form" onsubmit="saveProject(event)" class="p-6 space-y-4">
+      <input type="hidden" id="project-id" />
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block">Project Name *</label>
+        <input type="text" id="proj-name" required class="w-full text-sm" placeholder="e.g. Q4 Marketing Campaign" />
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block">Description</label>
+        <textarea id="proj-desc" rows="2" class="w-full text-sm resize-none" placeholder="Optional description"></textarea>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Budget ($)</label>
+          <input type="number" id="proj-budget" step="0.01" class="w-full text-sm" placeholder="10000" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Color</label>
+          <input type="color" id="proj-color" value="#6366f1" class="w-full !h-10 cursor-pointer" />
+        </div>
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block">Status</label>
+        <select id="proj-status" class="w-full text-sm">
+          <option value="active">Active</option>
+          <option value="paused">Paused</option>
+          <option value="completed">Completed</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 text-sm">Save Project</button>
+        <button type="button" onclick="closeModal('modal-project')" class="btn-ghost flex-1 text-sm">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Category Modal -->
+<div id="modal-category" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="modal-box w-full max-w-sm">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/8">
+      <h2 class="text-lg font-bold text-white">New Category</h2>
+      <button onclick="closeModal('modal-category')" class="text-gray-500 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="category-form" onsubmit="saveCategory(event)" class="p-6 space-y-4">
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block">Name *</label>
+        <input type="text" id="cat-name" required class="w-full text-sm" placeholder="e.g. Entertainment" />
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Icon (emoji)</label>
+          <input type="text" id="cat-icon" class="w-full text-sm" placeholder="🎭" maxlength="4" />
+        </div>
+        <div>
+          <label class="text-xs text-gray-500 mb-1 block">Color</label>
+          <input type="color" id="cat-color" value="#6366f1" class="w-full !h-10 cursor-pointer" />
+        </div>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" class="btn-primary flex-1 text-sm">Save</button>
+        <button type="button" onclick="closeModal('modal-category')" class="btn-ghost flex-1 text-sm">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- API Key Modal -->
+<div id="modal-key" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="modal-box w-full max-w-md">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/8">
+      <h2 class="text-lg font-bold text-white">Generate API Key</h2>
+      <button onclick="closeModal('modal-key')" class="text-gray-500 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="key-form" onsubmit="saveKey(event)" class="p-6 space-y-4">
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block">Key Name *</label>
+        <input type="text" id="key-name" required class="w-full text-sm" placeholder="e.g. Accounting System, CI Pipeline" />
+      </div>
+      <div>
+        <label class="text-xs text-gray-500 mb-1 block">Permissions</label>
+        <div class="flex gap-3">
+          <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" id="perm-read" checked class="!p-0 !rounded !w-4 !h-4" /> Read
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" id="perm-write" class="!p-0 !rounded !w-4 !h-4" /> Write
+          </label>
+          <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" id="perm-delete" class="!p-0 !rounded !w-4 !h-4" /> Delete
+          </label>
+        </div>
+      </div>
+      <div id="new-key-display" class="hidden bg-[#13141f] rounded-xl p-4">
+        <div class="text-xs text-yellow-400 mb-2 flex items-center gap-2"><i class="fas fa-exclamation-triangle"></i> Copy now — shown only once</div>
+        <code id="new-key-value" class="text-green-400 font-mono text-xs break-all"></code>
+        <button type="button" onclick="copyKey()" class="mt-2 btn-ghost text-xs py-1 px-3">Copy</button>
+      </div>
+      <div class="flex gap-3 pt-2">
+        <button type="submit" id="btn-gen-key" class="btn-primary flex-1 text-sm">Generate</button>
+        <button type="button" onclick="closeModal('modal-key')" class="btn-ghost flex-1 text-sm">Close</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- View Expense Modal -->
+<div id="modal-view-expense" class="hidden fixed inset-0 modal-bg z-50 flex items-center justify-center p-4">
+  <div class="modal-box w-full max-w-xl max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-white/8">
+      <h2 class="text-lg font-bold text-white">Expense Details</h2>
+      <button onclick="closeModal('modal-view-expense')" class="text-gray-500 hover:text-white text-xl"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="view-expense-content" class="p-6"></div>
+  </div>
+</div>
+
+<script>
+// ═══ CONFIG ══════════════════════════════════════════════════════════════════
+const API = '/employeeworkspace/expenses/api';
+let currentPage = 0;
+const PAGE_SIZE = 15;
+let currentPeriod = 30;
+let allProjects = [], allCategories = [];
+let selectedExpenses = new Set();
+let editingExpenseId = null;
+let charts = {};
+
+// ═══ UTILS ═══════════════════════════════════════════════════════════════════
+const fmt = (n, currency='USD') => new Intl.NumberFormat('en-US',{style:'currency',currency,maximumFractionDigits:2}).format(n||0);
+const fmtDate = (d) => d ? luxon.DateTime.fromISO(d).toLocaleString(luxon.DateTime.DATE_MED) : '—';
+const today = () => new Date().toISOString().split('T')[0];
+
+function notify(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `notification ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+async function api(path, opts={}) {
+  try {
+    const r = await fetch(API + path, {
+      headers: {'Content-Type': 'application/json', ...opts.headers},
+      ...opts
+    });
+    if (r.status === 401 && !opts.headers?.['X-API-Key']) { location.href = '/employeeworkspace/'; throw new Error('Please sign in'); }
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Request failed'); }
+    return r.json();
+  } catch(e) {
+    notify(e.message, 'error');
+    throw e;
+  }
+}
+
+// ═══ NAVIGATION ══════════════════════════════════════════════════════════════
+const pages = {
+  dashboard: 'Dashboard',
+  expenses: 'Expenses',
+  projects: 'Projects',
+  categories: 'Categories',
+  import: 'Import Bank Statement',
+  api: 'API Keys',
+  reports: 'Reports'
+};
+
+function nav(page) {
+  Object.keys(pages).forEach(p => {
+    document.getElementById(`page-${p}`)?.classList.toggle('hidden', p !== page);
+  });
+  document.querySelectorAll('.sidebar-link').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  document.getElementById('page-title').textContent = pages[page];
+  if (page === 'dashboard') loadDashboard();
+  if (page === 'expenses') loadExpenses();
+  if (page === 'projects') loadProjects();
+  if (page === 'categories') loadCategories();
+  if (page === 'api') loadApiKeys();
+  if (page === 'import') initImportPage();
+  return false;
+}
+
+// ═══ STATUS CHECK ═════════════════════════════════════════════════════════════
+async function checkStatus() {
+  const el = document.getElementById('api-status');
+  try {
+    await fetch(API + '/health');
+    el.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-400"></span> API Connected';
+    el.className = 'flex items-center gap-2 text-xs text-emerald-500';
+  } catch {
+    el.innerHTML = '<span class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></span> API Offline';
+    el.className = 'flex items-center gap-2 text-xs text-red-400';
+  }
+}
+
+// ═══ DASHBOARD ════════════════════════════════════════════════════════════════
+async function loadDashboard() {
+  const data = await api(`/dashboard?period=${currentPeriod}`).catch(()=>null);
+  if (!data) return;
+  const s = data.summary;
+  document.getElementById('stat-total').textContent = fmt(s.total_period);
+  document.getElementById('stat-count').textContent = s.expense_count;
+  document.getElementById('stat-projects').textContent = s.active_projects;
+  document.getElementById('stat-all-time').textContent = fmt(s.total_all);
+
+  // Trend chart
+  const monthly = data.monthly_trend;
+  renderChart('chart-trend', 'line', {
+    labels: monthly.map(m => m.month),
+    datasets: [{
+      label: 'Spend',
+      data: monthly.map(m => m.total),
+      borderColor: '#6366f1',
+      backgroundColor: 'rgba(99,102,241,.15)',
+      fill: true,
+      tension: 0.4,
+      pointBackgroundColor: '#6366f1',
+      pointRadius: 4
+    }]
+  }, {
+    plugins: { legend: { display: false } },
+    scales: {
+      y: { ticks: { color: '#6b7280', callback: v => '$'+v.toLocaleString() }, grid: { color: 'rgba(255,255,255,.05)' } },
+      x: { ticks: { color: '#6b7280' }, grid: { display: false } }
+    }
+  });
+
+  // Category donut
+  const cats = data.by_category.filter(c => c.total > 0);
+  renderChart('chart-category', 'doughnut', {
+    labels: cats.map(c => c.name),
+    datasets: [{
+      data: cats.map(c => c.total),
+      backgroundColor: cats.map(c => c.color + 'cc'),
+      borderColor: cats.map(c => c.color),
+      borderWidth: 2
+    }]
+  }, {
+    plugins: {
+      legend: { position: 'bottom', labels: { color: '#9ca3af', font: { size: 11 }, padding: 12 } }
+    },
+    cutout: '65%'
+  });
+
+  // Recent expenses
+  const recentEl = document.getElementById('recent-expenses-list');
+  recentEl.innerHTML = data.recent_expenses.slice(0,5).map(e => `
+    <div class="flex items-center gap-3 table-row rounded-xl p-2 cursor-pointer" onclick="viewExpense('${e.id}')">
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0" style="background:${(e.category_color||'#6366f1')}22">
+        ${e.category_icon || '📦'}
+      </div>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm font-medium text-white truncate">${e.title}</div>
+        <div class="text-xs text-gray-500">${e.project_name || 'No project'} · ${fmtDate(e.date)}</div>
+      </div>
+      <div class="text-right flex-shrink-0">
+        <div class="text-sm font-semibold text-white">${fmt(e.amount, e.currency)}</div>
+        ${statusBadge(e.status)}
+      </div>
+    </div>
+  `).join('') || '<div class="text-center text-gray-600 py-6">No expenses yet</div>';
+
+  // Project budgets
+  const projEl = document.getElementById('project-budgets-list');
+  projEl.innerHTML = data.by_project.filter(p => p.budget > 0).slice(0,5).map(p => {
+    const pct = Math.min((p.total / p.budget) * 100, 100);
+    const color = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#10b981';
+    return `
+      <div>
+        <div class="flex justify-between items-center mb-1.5">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full" style="background:${p.color}"></span>
+            <span class="text-sm text-gray-300">${p.name}</span>
+          </div>
+          <span class="text-xs text-gray-500">${fmt(p.total)} / ${fmt(p.budget)}</span>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill" style="width:${pct}%;background:${color}"></div>
+        </div>
+      </div>
+    `;
+  }).join('') || '<div class="text-center text-gray-600 py-4 text-sm">No budgets set</div>';
+}
+
+function renderChart(id, type, data, options) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  if (charts[id]) charts[id].destroy();
+  charts[id] = new Chart(ctx, {
+    type,
+    data,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#9ca3af' } } },
+      ...options
+    }
+  });
+}
+
+function setPeriod(days) {
+  currentPeriod = days;
+  document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active-period', 'bg-indigo-500/20', 'text-indigo-300', '!border-indigo-500/40'));
+  event.target.classList.add('active-period', 'bg-indigo-500/20', 'text-indigo-300');
+  loadDashboard();
+}
+
+// ═══ EXPENSES ════════════════════════════════════════════════════════════════
+let expenseTotal = 0;
+
+async function loadExpenses() {
+  const params = new URLSearchParams();
+  const pf = document.getElementById('filter-project')?.value;
+  const cf = document.getElementById('filter-category')?.value;
+  const sf = document.getElementById('filter-status')?.value;
+  const df = document.getElementById('filter-date-from')?.value;
+  const dt = document.getElementById('filter-date-to')?.value;
+  if (pf) params.set('project_id', pf);
+  if (cf) params.set('category_id', cf);
+  if (sf) params.set('status', sf);
+  if (df) params.set('date_from', df);
+  if (dt) params.set('date_to', dt);
+  params.set('limit', PAGE_SIZE);
+  params.set('offset', currentPage * PAGE_SIZE);
+
+  const data = await api(`/expenses?${params}`).catch(()=>null);
+  if (!data) return;
+
+  document.getElementById('expense-count-badge').textContent = data.total;
+  document.getElementById('expense-table-info').textContent = `Showing ${data.data.length} of ${data.total} expenses`;
+  document.getElementById('page-info').textContent = `Page ${currentPage+1}`;
+  document.getElementById('btn-prev').disabled = currentPage === 0;
+  document.getElementById('btn-next').disabled = data.data.length < PAGE_SIZE;
+
+  const tbody = document.getElementById('expense-table-body');
+  tbody.innerHTML = data.data.map(e => `
+    <tr class="table-row text-sm" data-id="${e.id}">
+      <td class="px-5 py-3">
+        <input type="checkbox" class="expense-cb !p-0 !rounded !w-4 !h-4" onchange="toggleSelect('${e.id}', this)" ${selectedExpenses.has(e.id)?'checked':''} />
+      </td>
+      <td class="px-5 py-3">
+        <div class="font-medium text-white">${e.title}</div>
+        ${e.description ? `<div class="text-xs text-gray-500 truncate max-w-xs">${e.description}</div>` : ''}
+        ${Array.isArray(e.tags) && e.tags.length ? `<div class="flex gap-1 mt-1">${e.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>` : ''}
+      </td>
+      <td class="px-3 py-3">
+        ${e.project_name ? `<span class="flex items-center gap-1.5 text-xs"><span class="w-2 h-2 rounded-full" style="background:${e.project_color}"></span>${e.project_name}</span>` : '<span class="text-gray-600 text-xs">—</span>'}
+      </td>
+      <td class="px-3 py-3">
+        ${e.category_name ? `<span class="text-xs">${e.category_icon||''} ${e.category_name}</span>` : '<span class="text-gray-600 text-xs">—</span>'}
+      </td>
+      <td class="px-3 py-3 text-gray-400 text-xs">${fmtDate(e.date)}</td>
+      <td class="px-3 py-3 text-gray-400 text-xs">${e.vendor || '—'}</td>
+      <td class="px-3 py-3">${statusBadge(e.status)}</td>
+      <td class="px-5 py-3 text-right font-semibold text-white">${fmt(e.amount, e.currency)}</td>
+      <td class="px-3 py-3 text-center">
+        ${e.attachments?.length ? `<span class="badge bg-blue-500/15 text-blue-300 cursor-pointer" onclick="viewExpense('${e.id}')">${e.attachments.length} 📎</span>` : '<span class="text-gray-700 text-xs">—</span>'}
+      </td>
+      <td class="px-3 py-3 text-center">
+        <div class="flex items-center justify-center gap-2">
+          <button onclick="viewExpense('${e.id}')" class="text-gray-500 hover:text-blue-400 text-sm tooltip" data-tip="View"><i class="fas fa-eye"></i></button>
+          <button onclick="openExpenseModal('${e.id}')" class="text-gray-500 hover:text-indigo-400 text-sm tooltip" data-tip="Edit"><i class="fas fa-pen"></i></button>
+          <button onclick="deleteExpense('${e.id}')" class="text-gray-500 hover:text-red-400 text-sm tooltip" data-tip="Delete"><i class="fas fa-trash"></i></button>
+        </div>
+      </td>
+    </tr>
+  `).join('') || `<tr><td colspan="10" class="text-center py-16 text-gray-600">No expenses found</td></tr>`;
+}
+
+function changePage(dir) {
+  currentPage = Math.max(0, currentPage + dir);
+  loadExpenses();
+}
+
+function clearFilters() {
+  ['filter-project','filter-category','filter-status','filter-date-from','filter-date-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  currentPage = 0;
+  loadExpenses();
+}
+
+function globalSearch(q) {
+  if (document.getElementById('page-expenses').classList.contains('hidden')) nav('expenses');
+  clearTimeout(window._searchTimer);
+  window._searchTimer = setTimeout(async () => {
+    const data = await api(`/expenses?search=${encodeURIComponent(q)}&limit=${PAGE_SIZE}`).catch(()=>null);
+    if (!data) return;
+    document.getElementById('expense-count-badge').textContent = data.total;
+    const tbody = document.getElementById('expense-table-body');
+    tbody.innerHTML = data.data.map(e => `
+      <tr class="table-row text-sm">
+        <td class="px-5 py-3"><input type="checkbox" class="!p-0 !rounded !w-4 !h-4" /></td>
+        <td class="px-5 py-3"><div class="font-medium text-white">${e.title}</div></td>
+        <td class="px-3 py-3 text-xs text-gray-400">${e.project_name||'—'}</td>
+        <td class="px-3 py-3 text-xs">${e.category_name||'—'}</td>
+        <td class="px-3 py-3 text-xs text-gray-400">${fmtDate(e.date)}</td>
+        <td class="px-3 py-3 text-xs text-gray-400">${e.vendor||'—'}</td>
+        <td class="px-3 py-3">${statusBadge(e.status)}</td>
+        <td class="px-5 py-3 text-right font-semibold text-white">${fmt(e.amount, e.currency)}</td>
+        <td class="px-3 py-3 text-center">${e.attachments?.length ? `<span class="badge bg-blue-500/15 text-blue-300">${e.attachments.length} 📎</span>` : '—'}</td>
+        <td class="px-3 py-3 text-center">
+          <button onclick="openExpenseModal('${e.id}')" class="text-gray-500 hover:text-indigo-400 text-sm"><i class="fas fa-pen"></i></button>
+          <button onclick="deleteExpense('${e.id}')" class="text-gray-500 hover:text-red-400 text-sm ml-2"><i class="fas fa-trash"></i></button>
+        </td>
+      </tr>
+    `).join('') || '<tr><td colspan="10" class="text-center py-16 text-gray-600">No results</td></tr>';
+  }, 300);
+}
+
+function statusBadge(s) {
+  const map = {
+    pending: 'bg-yellow-500/15 text-yellow-300',
+    approved: 'bg-green-500/15 text-green-300',
+    rejected: 'bg-red-500/15 text-red-300',
+    reimbursed: 'bg-blue-500/15 text-blue-300'
+  };
+  return `<span class="badge ${map[s]||'bg-gray-500/15 text-gray-400'}">${s||'—'}</span>`;
+}
+
+// ═══ EXPENSE MODAL ════════════════════════════════════════════════════════════
+async function openExpenseModal(id = null) {
+  editingExpenseId = id;
+  document.getElementById('expense-id').value = id || '';
+  document.getElementById('expense-modal-title').textContent = id ? 'Edit Expense' : 'Add Expense';
+  document.getElementById('save-expense-text').textContent = id ? 'Update Expense' : 'Save Expense';
+
+  // Populate selects
+  await loadSelectOptions();
+
+  if (id) {
+    const data = await api(`/expenses/${id}`).catch(()=>null);
+    if (!data) return;
+    const e = data.data;
+    document.getElementById('exp-title').value = e.title;
+    document.getElementById('exp-amount').value = e.amount;
+    document.getElementById('exp-currency').value = e.currency || 'USD';
+    document.getElementById('exp-date').value = e.date;
+    document.getElementById('exp-project').value = e.project_id || '';
+    document.getElementById('exp-category').value = e.category_id || '';
+    document.getElementById('exp-vendor').value = e.vendor || '';
+    document.getElementById('exp-paid-by').value = e.paid_by || '';
+    document.getElementById('exp-status').value = e.status;
+    document.getElementById('exp-desc').value = e.description || '';
+    document.getElementById('exp-tags').value = Array.isArray(e.tags) ? e.tags.join(', ') : '';
+
+    // Show existing attachments
+    document.getElementById('attachment-section').classList.remove('hidden');
+    renderExistingAttachments(e.attachments || [], id);
+  } else {
+    document.getElementById('expense-form').reset();
+    document.getElementById('exp-date').value = today();
+    document.getElementById('attachment-section').classList.add('hidden');
+    document.getElementById('attachment-list').innerHTML = '';
+  }
+
+  document.getElementById('modal-expense').classList.remove('hidden');
+}
+
+async function loadSelectOptions() {
+  if (!allProjects.length) {
+    const pd = await api('/projects').catch(()=>({data:[]}));
+    allProjects = pd.data;
+  }
+  if (!allCategories.length) {
+    const cd = await api('/categories').catch(()=>({data:[]}));
+    allCategories = cd.data;
+  }
+
+  const projSel = document.getElementById('exp-project');
+  projSel.innerHTML = '<option value="">No Project</option>' + allProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+
+  const catSel = document.getElementById('exp-category');
+  catSel.innerHTML = '<option value="">No Category</option>' + allCategories.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+
+  // Also populate filter selects
+  const fp = document.getElementById('filter-project');
+  if (fp) fp.innerHTML = '<option value="">All Projects</option>' + allProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+  const fc = document.getElementById('filter-category');
+  if (fc) fc.innerHTML = '<option value="">All Categories</option>' + allCategories.map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('');
+  const rp = document.getElementById('report-project');
+  if (rp) rp.innerHTML = '<option value="">All Projects</option>' + allProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+}
+
+function renderExistingAttachments(attachments, expenseId) {
+  const list = document.getElementById('attachment-list');
+  list.innerHTML = attachments.map(a => `
+    <div class="flex items-center gap-3 bg-[#13141f] rounded-xl p-3" id="att-${a.id}">
+      <span class="text-xl">${getFileIcon(a.original_name)}</span>
+      <div class="flex-1 min-w-0">
+        <a href="${API.replace('/api','')}/api/uploads/${a.filename}" target="_blank" class="text-sm text-indigo-300 hover:text-indigo-200 truncate block">${a.original_name}</a>
+        <span class="text-xs text-gray-500">${formatBytes(a.file_size)}</span>
+      </div>
+      <button onclick="deleteAttachment('${a.id}')" class="text-gray-600 hover:text-red-400 text-sm"><i class="fas fa-times"></i></button>
+    </div>
+  `).join('');
+}
+
+async function saveExpense(e) {
+  e.preventDefault();
+  const id = document.getElementById('expense-id').value;
+  const tagsRaw = document.getElementById('exp-tags').value;
+  const tags = tagsRaw ? tagsRaw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+  const payload = {
+    title: document.getElementById('exp-title').value,
+    amount: parseFloat(document.getElementById('exp-amount').value),
+    currency: document.getElementById('exp-currency').value,
+    date: document.getElementById('exp-date').value,
+    project_id: document.getElementById('exp-project').value || null,
+    category_id: document.getElementById('exp-category').value || null,
+    vendor: document.getElementById('exp-vendor').value,
+    paid_by: document.getElementById('exp-paid-by').value,
+    status: document.getElementById('exp-status').value,
+    description: document.getElementById('exp-desc').value,
+    tags
+  };
+
+  let result;
+  if (id) {
+    result = await api(`/expenses/${id}`, {method:'PUT', body: JSON.stringify(payload)}).catch(()=>null);
+  } else {
+    result = await api('/expenses', {method:'POST', body: JSON.stringify(payload)}).catch(()=>null);
+  }
+  if (!result) return;
+
+  const newId = result.data.id;
+
+  // Upload pending files
+  const files = pendingFiles || [];
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append('file', f);
+    await fetch(`${API}/expenses/${newId}/attachments`, {method:'POST', body: fd});
+  }
+  pendingFiles = [];
+
+  notify(id ? 'Expense updated!' : 'Expense created!');
+  closeModal('modal-expense');
+  allProjects = []; allCategories = []; // refresh cache
+  if (!document.getElementById('page-expenses').classList.contains('hidden')) loadExpenses();
+  if (!document.getElementById('page-dashboard').classList.contains('hidden')) loadDashboard();
+}
+
+async function deleteExpense(id) {
+  if (!confirm('Delete this expense and all its attachments?')) return;
+  await api(`/expenses/${id}`, {method:'DELETE'});
+  notify('Expense deleted', 'info');
+  loadExpenses();
+}
+
+// ═══ FILE ATTACHMENTS ═════════════════════════════════════════════════════════
+let pendingFiles = [];
+
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.add('drag-over');
+}
+function handleDragLeave() {
+  document.getElementById('drop-zone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  addFiles(Array.from(e.dataTransfer.files));
+}
+function handleFileSelect(e) {
+  addFiles(Array.from(e.target.files));
+}
+function addFiles(files) {
+  document.getElementById('attachment-section').classList.remove('hidden');
+  files.forEach(f => {
+    pendingFiles.push(f);
+    const id = 'pf-' + Math.random().toString(36).slice(2);
+    const div = document.createElement('div');
+    div.id = id;
+    div.className = 'flex items-center gap-3 bg-[#13141f] rounded-xl p-3';
+    div.innerHTML = `
+      <span class="text-xl">${getFileIcon(f.name)}</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-sm text-gray-300 truncate">${f.name}</div>
+        <div class="text-xs text-gray-500">${formatBytes(f.size)}</div>
+      </div>
+      <button type="button" onclick="removePendingFile('${id}', this)" class="text-gray-600 hover:text-red-400 text-sm"><i class="fas fa-times"></i></button>
+    `;
+    document.getElementById('attachment-list').appendChild(div);
+  });
+}
+function removePendingFile(domId, btn) {
+  const idx = pendingFiles.findIndex(f => f.name === btn.closest('[id]').querySelector('.text-gray-300')?.textContent?.trim());
+  if (idx > -1) pendingFiles.splice(idx, 1);
+  document.getElementById(domId)?.remove();
+}
+async function deleteAttachment(id) {
+  await api(`/attachments/${id}`, {method:'DELETE'});
+  document.getElementById(`att-${id}`)?.remove();
+  notify('Attachment removed', 'info');
+}
+function getFileIcon(name) {
+  const ext = (name||'').split('.').pop().toLowerCase();
+  const map = {pdf:'📄',png:'🖼️',jpg:'🖼️',jpeg:'🖼️',gif:'🖼️',doc:'📝',docx:'📝',xls:'📊',xlsx:'📊',csv:'📊',zip:'🗜️',txt:'📄'};
+  return map[ext] || '📎';
+}
+function formatBytes(b) {
+  if (!b) return '?';
+  if (b < 1024) return b + ' B';
+  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
+  return (b/1024/1024).toFixed(1) + ' MB';
+}
+
+// ═══ VIEW EXPENSE ═════════════════════════════════════════════════════════════
+async function viewExpense(id) {
+  const data = await api(`/expenses/${id}`).catch(()=>null);
+  if (!data) return;
+  const e = data.data;
+  const content = document.getElementById('view-expense-content');
+  content.innerHTML = `
+    <div class="space-y-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <h3 class="text-xl font-bold text-white">${e.title}</h3>
+          <div class="text-3xl font-bold mt-1 text-indigo-400">${fmt(e.amount, e.currency)}</div>
+        </div>
+        <div class="text-right">
+          ${statusBadge(e.status)}
+          <div class="text-xs text-gray-500 mt-2">${fmtDate(e.date)}</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4 text-sm">
+        <div><span class="text-gray-500">Project</span><div class="text-white mt-0.5">${e.project_name || '—'}</div></div>
+        <div><span class="text-gray-500">Category</span><div class="text-white mt-0.5">${e.category_icon||''} ${e.category_name || '—'}</div></div>
+        <div><span class="text-gray-500">Vendor</span><div class="text-white mt-0.5">${e.vendor || '—'}</div></div>
+        <div><span class="text-gray-500">Paid By</span><div class="text-white mt-0.5">${e.paid_by || '—'}</div></div>
+      </div>
+      ${e.description ? `<div class="bg-[#13141f] rounded-xl p-4"><div class="text-xs text-gray-500 mb-1">Description</div><div class="text-sm text-gray-300">${e.description}</div></div>` : ''}
+      ${Array.isArray(e.tags) && e.tags.length ? `<div class="flex flex-wrap gap-1.5">${e.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>` : ''}
+      ${e.attachments?.length ? `
+        <div>
+          <div class="text-xs text-gray-500 mb-2">Attachments (${e.attachments.length})</div>
+          <div class="space-y-2">
+            ${e.attachments.map(a => `
+              <a href="${API.replace('/api','')}/api/uploads/${a.filename}" target="_blank" class="flex items-center gap-3 bg-[#13141f] rounded-xl p-3 hover:bg-[#1e1f2e] transition">
+                <span class="text-xl">${getFileIcon(a.original_name)}</span>
+                <div class="flex-1"><div class="text-sm text-indigo-300">${a.original_name}</div><div class="text-xs text-gray-500">${formatBytes(a.file_size)}</div></div>
+                <i class="fas fa-download text-gray-500 text-xs"></i>
+              </a>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+      <div class="flex gap-3 pt-2">
+        <button onclick="closeModal('modal-view-expense');openExpenseModal('${e.id}')" class="btn-primary flex-1 text-sm">Edit Expense</button>
+        <button onclick="closeModal('modal-view-expense')" class="btn-ghost flex-1 text-sm">Close</button>
+      </div>
+    </div>
+  `;
+  document.getElementById('modal-view-expense').classList.remove('hidden');
+}
+
+// ═══ PROJECTS ═════════════════════════════════════════════════════════════════
+async function loadProjects() {
+  const data = await api('/projects').catch(()=>({data:[]}));
+  allProjects = data.data;
+  const grid = document.getElementById('projects-grid');
+  grid.innerHTML = data.data.map(p => {
+    const pct = p.budget > 0 ? Math.min((p.total_spent/p.budget)*100,100) : 0;
+    const budgetColor = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#10b981';
+    const statusColors = {active:'bg-green-500/15 text-green-400',paused:'bg-yellow-500/15 text-yellow-400',completed:'bg-blue-500/15 text-blue-400',archived:'bg-gray-500/15 text-gray-400'};
+    return `
+      <div class="card card-hover p-5">
+        <div class="flex items-start justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-lg" style="background:${p.color}33;border:1px solid ${p.color}44">
+              <span style="color:${p.color}">${p.name[0].toUpperCase()}</span>
+            </div>
+            <div>
+              <div class="font-semibold text-white">${p.name}</div>
+              <span class="badge ${statusColors[p.status]||'bg-gray-500/15 text-gray-400'} mt-0.5">${p.status}</span>
+            </div>
+          </div>
+          <div class="flex gap-1">
+            <button onclick="openProjectModal('${p.id}')" class="text-gray-600 hover:text-indigo-400 text-sm p-1"><i class="fas fa-pen"></i></button>
+            <button onclick="deleteProject('${p.id}')" class="text-gray-600 hover:text-red-400 text-sm p-1"><i class="fas fa-trash"></i></button>
+          </div>
+        </div>
+        ${p.description ? `<p class="text-xs text-gray-500 mb-4 line-clamp-2">${p.description}</p>` : ''}
+        <div class="grid grid-cols-2 gap-3 mb-4 text-sm">
+          <div class="bg-[#13141f] rounded-xl p-3">
+            <div class="text-xs text-gray-500 mb-0.5">Total Spent</div>
+            <div class="font-bold text-white">${fmt(p.total_spent)}</div>
+          </div>
+          <div class="bg-[#13141f] rounded-xl p-3">
+            <div class="text-xs text-gray-500 mb-0.5">Expenses</div>
+            <div class="font-bold text-white">${p.expense_count}</div>
+          </div>
+        </div>
+        ${p.budget > 0 ? `
+          <div>
+            <div class="flex justify-between text-xs text-gray-500 mb-1.5">
+              <span>Budget: ${fmt(p.budget)}</span>
+              <span style="color:${budgetColor}">${pct.toFixed(0)}% used</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill" style="width:${pct}%;background:${budgetColor}"></div>
+            </div>
+          </div>
+        ` : ''}
+        <button onclick="filterByProject('${p.id}')" class="mt-4 text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+          View expenses <i class="fas fa-arrow-right text-xs"></i>
+        </button>
+      </div>
+    `;
+  }).join('') || '<div class="col-span-3 text-center text-gray-600 py-16">No projects yet</div>';
+}
+
+function filterByProject(id) {
+  nav('expenses');
+  setTimeout(() => {
+    document.getElementById('filter-project').value = id;
+    loadExpenses();
+  }, 50);
+}
+
+async function openProjectModal(id = null) {
+  document.getElementById('project-modal-title').textContent = id ? 'Edit Project' : 'New Project';
+  document.getElementById('project-id').value = id || '';
+  document.getElementById('project-form').reset();
+  if (id) {
+    const data = await api(`/projects/${id}`).catch(()=>null);
+    if (!data) return;
+    const p = data.data;
+    document.getElementById('proj-name').value = p.name;
+    document.getElementById('proj-desc').value = p.description || '';
+    document.getElementById('proj-budget').value = p.budget || '';
+    document.getElementById('proj-color').value = p.color;
+    document.getElementById('proj-status').value = p.status;
+  }
+  document.getElementById('modal-project').classList.remove('hidden');
+}
+
+async function saveProject(e) {
+  e.preventDefault();
+  const id = document.getElementById('project-id').value;
+  const payload = {
+    name: document.getElementById('proj-name').value,
+    description: document.getElementById('proj-desc').value,
+    budget: parseFloat(document.getElementById('proj-budget').value) || 0,
+    color: document.getElementById('proj-color').value,
+    status: document.getElementById('proj-status').value
+  };
+  if (id) await api(`/projects/${id}`, {method:'PUT', body:JSON.stringify(payload)});
+  else await api('/projects', {method:'POST', body:JSON.stringify(payload)});
+  notify(id ? 'Project updated!' : 'Project created!');
+  allProjects = [];
+  closeModal('modal-project');
+  loadProjects();
+}
+
+async function deleteProject(id) {
+  if (!confirm('Delete this project? Expenses will remain but lose project association.')) return;
+  await api(`/projects/${id}`, {method:'DELETE'});
+  notify('Project deleted', 'info');
+  allProjects = [];
+  loadProjects();
+}
+
+// ═══ CATEGORIES ═══════════════════════════════════════════════════════════════
+async function loadCategories() {
+  const data = await api('/categories').catch(()=>({data:[]}));
+  allCategories = data.data;
+  const grid = document.getElementById('categories-grid');
+  grid.innerHTML = data.data.map(c => `
+    <div class="card card-hover p-4 flex items-center gap-4">
+      <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style="background:${c.color}22">
+        ${c.icon}
+      </div>
+      <div class="flex-1">
+        <div class="font-medium text-white">${c.name}</div>
+        <div class="text-xs text-gray-500 mt-0.5" style="color:${c.color}">${c.color}</div>
+      </div>
+      <button onclick="deleteCategory('${c.id}')" class="text-gray-600 hover:text-red-400 text-sm"><i class="fas fa-trash"></i></button>
+    </div>
+  `).join('');
+}
+
+function openCategoryModal() {
+  document.getElementById('category-form').reset();
+  document.getElementById('modal-category').classList.remove('hidden');
+}
+
+async function saveCategory(e) {
+  e.preventDefault();
+  await api('/categories', {method:'POST', body:JSON.stringify({
+    name: document.getElementById('cat-name').value,
+    icon: document.getElementById('cat-icon').value || '📦',
+    color: document.getElementById('cat-color').value
+  })});
+  notify('Category created!');
+  allCategories = [];
+  closeModal('modal-category');
+  loadCategories();
+}
+
+async function deleteCategory(id) {
+  if (!confirm('Delete this category?')) return;
+  await api(`/categories/${id}`, {method:'DELETE'});
+  notify('Category deleted', 'info');
+  allCategories = [];
+  loadCategories();
+}
+
+// ═══ API KEYS ═════════════════════════════════════════════════════════════════
+async function loadApiKeys() {
+  const data = await api('/keys').catch(()=>({data:[]}));
+  const el = document.getElementById('api-keys-list');
+  el.innerHTML = data.data.map(k => `
+    <div class="bg-[#13141f] rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2">
+        <span class="font-medium text-white text-sm">${k.name}</span>
+        <button onclick="deleteKey('${k.id}')" class="btn-danger text-xs py-1 px-2">Revoke</button>
+      </div>
+      <div class="flex flex-wrap gap-1 mb-2">
+        ${(Array.isArray(k.permissions)?k.permissions:[]).map(p=>`<span class="badge bg-indigo-500/15 text-indigo-300">${p}</span>`).join('')}
+      </div>
+      <div class="text-xs text-gray-500">Created: ${fmtDate(k.created_at)} · Last used: ${k.last_used ? fmtDate(k.last_used) : 'Never'}</div>
+    </div>
+  `).join('') || '<div class="text-center text-gray-600 py-6 text-sm">No API keys yet</div>';
+}
+
+function openKeyModal() {
+  document.getElementById('key-form').reset();
+  document.getElementById('new-key-display').classList.add('hidden');
+  document.getElementById('btn-gen-key').classList.remove('hidden');
+  document.getElementById('modal-key').classList.remove('hidden');
+}
+
+async function saveKey(e) {
+  e.preventDefault();
+  const perms = [];
+  if (document.getElementById('perm-read').checked) perms.push('read');
+  if (document.getElementById('perm-write').checked) perms.push('write');
+  if (document.getElementById('perm-delete').checked) perms.push('delete');
+  const data = await api('/keys', {method:'POST', body:JSON.stringify({
+    name: document.getElementById('key-name').value, permissions: perms
+  })});
+  document.getElementById('new-key-value').textContent = data.data.raw_key;
+  document.getElementById('new-key-display').classList.remove('hidden');
+  document.getElementById('btn-gen-key').classList.add('hidden');
+  loadApiKeys();
+}
+
+async function deleteKey(id) {
+  if (!confirm('Revoke this API key? Any systems using it will lose access.')) return;
+  await api(`/keys/${id}`, {method:'DELETE'});
+  notify('API key revoked', 'info');
+  loadApiKeys();
+}
+
+function copyKey() {
+  navigator.clipboard.writeText(document.getElementById('new-key-value').textContent);
+  notify('API key copied!');
+}
+
+async function testApi() {
+  const sel = document.getElementById('test-method').value;
+  const path = sel.replace(/^(GET|POST) /, '').replace('/api', '');
+  const pre = document.getElementById('api-response');
+  pre.classList.remove('hidden');
+  pre.textContent = 'Loading…';
+  try {
+    const r = await fetch(API + path);
+    const j = await r.json();
+    pre.textContent = JSON.stringify(j, null, 2);
+  } catch(e) {
+    pre.textContent = 'Error: ' + e.message;
+    pre.className = pre.className.replace('text-green-400','text-red-400');
+  }
+}
+
+// ═══ REPORTS ══════════════════════════════════════════════════════════════════
+async function loadReport() {
+  const from = document.getElementById('report-from').value;
+  const to = document.getElementById('report-to').value;
+  const proj = document.getElementById('report-project').value;
+  if (!from || !to) { notify('Select a date range', 'error'); return; }
+
+  const params = new URLSearchParams({date_from: from, date_to: to});
+  if (proj) params.set('project_id', proj);
+  const data = await api(`/reports/summary?${params}`).catch(()=>null);
+  if (!data) return;
+
+  const out = document.getElementById('report-output');
+  out.innerHTML = `
+    <div class="stat-card p-5 text-center">
+      <div class="text-3xl font-bold text-white mb-1">${fmt(data.total)}</div>
+      <div class="text-xs text-gray-500">Total Spend</div>
+    </div>
+    <div class="stat-card p-5 text-center">
+      <div class="text-3xl font-bold text-white mb-1">${data.count}</div>
+      <div class="text-xs text-gray-500">Expenses</div>
+    </div>
+    <div class="stat-card p-5 text-center">
+      <div class="text-3xl font-bold text-white mb-1">${fmt(data.average)}</div>
+      <div class="text-xs text-gray-500">Avg per Expense</div>
+    </div>
+    <div class="col-span-3 card p-5">
+      <h3 class="font-semibold text-white mb-4">Weekly Breakdown</h3>
+      <canvas id="report-chart" height="120"></canvas>
+    </div>
+    <div class="col-span-3 card p-5">
+      <h3 class="font-semibold text-white mb-4">Weekly Detail</h3>
+      <table class="w-full text-sm">
+        <thead><tr class="text-xs text-gray-500 border-b border-white/5">
+          <th class="text-left pb-2">Week</th>
+          <th class="text-right pb-2">Total</th>
+          <th class="text-right pb-2">Count</th>
+          <th class="text-right pb-2">Avg</th>
+        </tr></thead>
+        <tbody class="divide-y divide-white/5">
+          ${data.weekly_breakdown.map(w=>`
+            <tr class="table-row">
+              <td class="py-2 text-gray-300">${w.week}</td>
+              <td class="py-2 text-right font-semibold text-white">${fmt(w.total)}</td>
+              <td class="py-2 text-right text-gray-400">${w.count}</td>
+              <td class="py-2 text-right text-gray-400">${fmt(w.count ? w.total/w.count : 0)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  setTimeout(() => {
+    renderChart('report-chart', 'bar', {
+      labels: data.weekly_breakdown.map(w => w.week),
+      datasets: [{
+        label: 'Weekly Spend',
+        data: data.weekly_breakdown.map(w => w.total),
+        backgroundColor: 'rgba(99,102,241,.7)',
+        borderColor: '#6366f1',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    }, {
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { ticks: { color: '#6b7280', callback: v => '$'+v.toLocaleString() }, grid: { color: 'rgba(255,255,255,.05)' } },
+        x: { ticks: { color: '#6b7280' }, grid: { display: false } }
+      }
+    });
+  }, 100);
+}
+
+// ═══ BULK SELECT ══════════════════════════════════════════════════════════════
+function selectAll(cb) {
+  document.querySelectorAll('.expense-cb').forEach(c => {
+    c.checked = cb.checked;
+    const id = c.closest('tr').dataset.id;
+    if (cb.checked) selectedExpenses.add(id); else selectedExpenses.delete(id);
+  });
+  updateBulkUI();
+}
+function toggleSelect(id, cb) {
+  if (cb.checked) selectedExpenses.add(id); else selectedExpenses.delete(id);
+  updateBulkUI();
+}
+function updateBulkUI() {
+  const n = selectedExpenses.size;
+  document.getElementById('btn-bulk-delete').classList.toggle('hidden', n === 0);
+  document.getElementById('selected-total').classList.toggle('hidden', n === 0);
+  if (n > 0) document.getElementById('selected-total').textContent = `${n} selected`;
+}
+async function bulkDelete() {
+  if (!confirm(`Delete ${selectedExpenses.size} expenses?`)) return;
+  for (const id of selectedExpenses) await api(`/expenses/${id}`, {method:'DELETE'});
+  selectedExpenses.clear();
+  updateBulkUI();
+  notify(`Deleted ${selectedExpenses.size || 'selected'} expenses`, 'info');
+  loadExpenses();
+}
+
+// ═══ MODAL ════════════════════════════════════════════════════════════════════
+function closeModal(id) {
+  document.getElementById(id).classList.add('hidden');
+  if (id === 'modal-expense') { pendingFiles = []; editingExpenseId = null; }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('[id^=modal-]').forEach(m => m.classList.add('hidden')); });
+// Click outside to close
+document.querySelectorAll('[id^=modal-]').forEach(m => m.addEventListener('click', e => { if (e.target === m) closeModal(m.id); }));
+
+// ═══ INIT ═════════════════════════════════════════════════════════════════════
+// ═══ IMPORT ═══════════════════════════════════════════════════════════════════
+let importPreviewData = [];   // raw parsed rows from backend
+let importDisplayData = [];   // filtered view
+let importFile = null;
+
+async function initImportPage() {
+  // Populate project dropdown
+  if (!allProjects.length) {
+    const pd = await api('/projects').catch(() => ({ data: [] }));
+    allProjects = pd.data;
+  }
+  const sel = document.getElementById('import-default-project');
+  sel.innerHTML = '<option value="">No project (assign later)</option>' +
+    allProjects.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+
+  // Set default import tag
+  const tagEl = document.getElementById('import-tag');
+  if (!tagEl.value) tagEl.value = `bank-import-${today()}`;
+
+  // Load templates
+  loadImportTemplates();
+  setImportStep(1);
+}
+
+async function loadImportTemplates() {
+  const data = await api('/import/templates').catch(() => null);
+  if (!data) return;
+  const container = document.getElementById('template-buttons');
+  const labels = { generic: 'Generic CSV', chase: 'Chase Bank', boa: 'Bank of America', hdfc: 'HDFC Bank', icici: 'ICICI Bank' };
+  container.innerHTML = Object.entries(data.templates).map(([key, csv]) => `
+    <button onclick="downloadTemplate('${key}', \`${btoa(csv)}\`)"
+            class="btn-ghost text-xs py-1.5 w-full flex items-center gap-2">
+      <i class="fas fa-download text-xs"></i> ${labels[key] || key}
+    </button>
+  `).join('');
+}
+
+function downloadTemplate(name, b64) {
+  const csv = atob(b64);
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${name}_template.csv`;
+  a.click();
+}
+
+function handleImportDrop(e) {
+  e.preventDefault();
+  document.getElementById('import-drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) setImportFile(file);
+}
+
+function handleImportFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) setImportFile(file);
+}
+
+function setImportFile(file) {
+  importFile = file;
+  document.getElementById('import-file-info').classList.remove('hidden');
+  document.getElementById('import-file-name').textContent = file.name;
+  document.getElementById('import-file-size').textContent = formatBytes(file.size);
+  document.getElementById('btn-preview').disabled = false;
+  document.getElementById('btn-preview').classList.remove('opacity-50');
+  // Show drop zone as selected
+  document.getElementById('import-drop-zone').innerHTML = `
+    <div class="w-16 h-16 rounded-2xl bg-green-500/15 flex items-center justify-center mx-auto mb-3">
+      <i class="fas fa-check-circle text-green-400 text-3xl"></i>
+    </div>
+    <div class="text-base font-medium text-white">${file.name}</div>
+    <div class="text-xs text-gray-500 mt-1">${formatBytes(file.size)} · Ready to parse</div>
+  `;
+}
+
+function clearImportFile() {
+  importFile = null;
+  document.getElementById('import-file-info').classList.add('hidden');
+  document.getElementById('btn-preview').disabled = true;
+  document.getElementById('import-drop-zone').innerHTML = `
+    <div class="w-16 h-16 rounded-2xl bg-indigo-500/15 flex items-center justify-center mx-auto mb-4">
+      <i class="fas fa-file-csv text-indigo-400 text-3xl"></i>
+    </div>
+    <div class="text-base font-medium text-white mb-1">Drop your bank statement here</div>
+    <div class="text-sm text-gray-500 mb-4">or click to browse</div>
+    <div class="flex items-center justify-center gap-3 flex-wrap">
+      <span class="badge bg-white/5 text-gray-400">CSV</span>
+      <span class="badge bg-white/5 text-gray-400">TSV</span>
+      <span class="badge bg-white/5 text-gray-400">TXT</span>
+    </div>
+  `;
+  document.getElementById('import-drop-zone').onclick = () => document.getElementById('import-file-input').click();
+  document.getElementById('import-file-input').value = '';
+}
+
+async function runImportPreview() {
+  if (!importFile) return;
+  const btn = document.getElementById('btn-preview');
+  btn.innerHTML = '<span class="spinner"></span> Parsing…';
+  btn.disabled = true;
+
+  const fd = new FormData();
+  fd.append('file', importFile);
+
+  try {
+    const r = await fetch(`${API}/import/preview`, { method: 'POST', body: fd });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error); }
+    const data = await r.json();
+
+    if (!data.transactions.length) {
+      notify('No transactions found in file. Check the format.', 'error');
+      btn.innerHTML = '<i class="fas fa-search text-xs"></i> Parse & Preview';
+      btn.disabled = false;
+      return;
+    }
+
+    // Attach per-row state for editing
+    importPreviewData = data.transactions.map(t => ({
+      ...t,
+      // editable fields
+      _title: t.title,
+      _category_id: t.suggested_category_id,
+      _category_name: t.suggested_category_name,
+      _project_id: document.getElementById('import-default-project').value || '',
+      _status: document.getElementById('import-default-status').value || 'pending',
+      _vendor: t.vendor,
+      _selected: t.selected,
+    }));
+    importDisplayData = [...importPreviewData];
+
+    renderImportTable(importDisplayData);
+    updateImportSummary();
+    setImportStep(2);
+
+    notify(`Parsed ${data.total} transactions, ${data.auto_selected} pre-selected as expenses`, 'info');
+  } catch (e) {
+    notify(e.message, 'error');
+    btn.innerHTML = '<i class="fas fa-search text-xs"></i> Parse & Preview';
+    btn.disabled = false;
+  }
+}
+
+function renderImportTable(rows) {
+  const tbody = document.getElementById('import-table-body');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" class="text-center py-12 text-gray-600">No matching transactions</td></tr>';
+    return;
+  }
+
+  // Build category options once
+  const catOptions = allCategories.map(c =>
+    `<option value="${c.id}">${c.icon} ${c.name}</option>`
+  ).join('');
+  const projOptions = '<option value="">— none —</option>' + allProjects.map(p =>
+    `<option value="${p.id}">${p.name}</option>`
+  ).join('');
+
+  tbody.innerHTML = rows.map((t, idx) => {
+    const globalIdx = importPreviewData.indexOf(t);
+    const confColor = t.confidence > 60 ? '#10b981' : t.confidence > 30 ? '#f59e0b' : '#6b7280';
+    const typeColor = t.type === 'debit' ? 'text-red-400' : 'text-emerald-400';
+    const typeIcon  = t.type === 'debit' ? '↑' : '↓';
+    return `
+    <tr class="import-row table-row ${t.type} ${t._selected ? '' : 'unchecked'}" id="irow-${globalIdx}">
+      <td class="px-4 py-2.5">
+        <input type="checkbox" class="!p-0 !rounded !w-4 !h-4" ${t._selected ? 'checked' : ''}
+               onchange="toggleImportRow(${globalIdx}, this.checked)" />
+      </td>
+      <td class="px-3 py-2.5 text-gray-300 whitespace-nowrap">${fmtDate(t.date)}</td>
+      <td class="px-3 py-2.5" style="max-width:220px">
+        <input class="editable-cell w-full" value="${escHtml(t._title)}"
+               onchange="updateImportRow(${globalIdx}, 'title', this.value)"
+               title="${escHtml(t.description)}" />
+        <div class="text-gray-600 text-[10px] truncate mt-0.5">${escHtml(t.description)}</div>
+      </td>
+      <td class="px-3 py-2.5">
+        <select class="editable-select" onchange="updateImportRow(${globalIdx}, 'category_id', this.value)">
+          <option value="">— uncategorized —</option>
+          ${catOptions.replace(`value="${t._category_id}"`, `value="${t._category_id}" selected`)}
+        </select>
+      </td>
+      <td class="px-3 py-2.5">
+        <select class="editable-select" onchange="updateImportRow(${globalIdx}, 'project_id', this.value)">
+          ${projOptions.replace(`value="${t._project_id}"`, `value="${t._project_id}" selected`)}
+        </select>
+      </td>
+      <td class="px-3 py-2.5">
+        <input class="editable-cell" value="${escHtml(t._vendor)}"
+               onchange="updateImportRow(${globalIdx}, 'vendor', this.value)" style="width:90px" />
+      </td>
+      <td class="px-3 py-2.5 text-center">
+        <span class="${typeColor} font-bold">${typeIcon}</span>
+        <span class="text-gray-500 text-[10px] block">${t.type}</span>
+      </td>
+      <td class="px-4 py-2.5 text-right font-semibold ${typeColor} whitespace-nowrap">
+        ${fmt(t.amount)}
+      </td>
+      <td class="px-3 py-2.5">
+        <div class="conf-bar mx-auto">
+          <div class="conf-fill" style="width:${t.confidence}%;background:${confColor}"></div>
+        </div>
+        <div class="text-center text-[10px] mt-0.5" style="color:${confColor}">${t.confidence}%</div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function updateImportRow(idx, field, value) {
+  const t = importPreviewData[idx];
+  if (!t) return;
+  if (field === 'title') t._title = value;
+  else if (field === 'category_id') {
+    t._category_id = value;
+    const cat = allCategories.find(c => c.id === value);
+    t._category_name = cat ? cat.name : '';
+  }
+  else if (field === 'project_id') t._project_id = value;
+  else if (field === 'vendor') t._vendor = value;
+  updateImportSummary();
+}
+
+function toggleImportRow(idx, checked) {
+  importPreviewData[idx]._selected = checked;
+  const row = document.getElementById(`irow-${idx}`);
+  if (row) row.classList.toggle('unchecked', !checked);
+  updateImportSummary();
+}
+
+function importSelectAll(all) {
+  importPreviewData.forEach((t, idx) => {
+    const checked = all ? true : (t.type === 'debit');
+    t._selected = checked;
+    const row = document.getElementById(`irow-${idx}`);
+    if (row) {
+      row.classList.toggle('unchecked', !checked);
+      const cb = row.querySelector('input[type=checkbox]');
+      if (cb) cb.checked = checked;
+    }
+  });
+  document.getElementById('import-select-all-cb').checked = all;
+  updateImportSummary();
+}
+
+function importSelectAllCb(cb) {
+  importSelectAll(cb.checked);
+}
+
+function filterImportRows(q) {
+  const lower = q.toLowerCase();
+  importDisplayData = importPreviewData.filter(t =>
+    !q || t.description.toLowerCase().includes(lower) ||
+    t._title.toLowerCase().includes(lower) ||
+    t._vendor.toLowerCase().includes(lower) ||
+    (t._category_name || '').toLowerCase().includes(lower)
+  );
+  renderImportTable(importDisplayData);
+}
+
+function updateImportSummary() {
+  const selected = importPreviewData.filter(t => t._selected);
+  const total = importPreviewData.length;
+  const totalAmt = selected.reduce((s, t) => s + (t.type === 'debit' ? t.amount : 0), 0);
+  const autoCat = importPreviewData.filter(t => t._selected && t._category_id && t.confidence > 20).length;
+
+  document.getElementById('imp-total').textContent = total;
+  document.getElementById('imp-selected').textContent = selected.length;
+  document.getElementById('imp-total-amount').textContent = fmt(totalAmt);
+  document.getElementById('imp-auto-cat').textContent = autoCat;
+}
+
+async function confirmImport() {
+  const selected = importPreviewData.filter(t => t._selected);
+  if (!selected.length) { notify('No transactions selected', 'error'); return; }
+
+  const btn = document.querySelector('#import-step-2 button:last-child');
+  btn.innerHTML = '<span class="spinner"></span> Importing…';
+  btn.disabled = true;
+
+  const transactions = selected.map(t => ({
+    selected: true,
+    row_index: t.row_index,
+    title: t._title || t.title,
+    description: t.description,
+    amount: t.amount,
+    currency: 'USD',
+    date: t.date,
+    vendor: t._vendor || t.vendor,
+    category_id: t._category_id || null,
+    project_id: t._project_id || null,
+    type: t.type,
+    status: t._status || document.getElementById('import-default-status').value || 'pending',
+  }));
+
+  const payload = {
+    transactions,
+    default_project_id: document.getElementById('import-default-project').value || null,
+    default_status: document.getElementById('import-default-status').value || 'pending',
+    import_tag: document.getElementById('import-tag').value || `bank-import-${today()}`,
+  };
+
+  const result = await api('/import/confirm', { method: 'POST', body: JSON.stringify(payload) }).catch(() => null);
+  if (!result) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download text-xs"></i> Import Selected Transactions'; return; }
+
+  document.getElementById('import-done-msg').textContent =
+    `${result.imported} transactions imported successfully.${result.errors.length ? ` ${result.errors.length} rows had errors.` : ''}`;
+
+  setImportStep(3);
+  // Refresh caches
+  allProjects = [];
+}
+
+function setImportStep(step) {
+  [1, 2, 3].forEach(s => {
+    document.getElementById(`import-step-${s}`)?.classList.toggle('hidden', s !== step);
+    const ind = document.querySelector(`.import-step-indicator[data-step="${s}"]`);
+    if (ind) {
+      ind.classList.toggle('active', s === step);
+      ind.classList.toggle('done', s < step);
+    }
+  });
+}
+
+function backToUpload() {
+  setImportStep(1);
+}
+
+function resetImport() {
+  importPreviewData = [];
+  importDisplayData = [];
+  importFile = null;
+  document.getElementById('import-file-input').value = '';
+  clearImportFile();
+  document.getElementById('import-table-body').innerHTML = '';
+  setImportStep(1);
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══ INIT ═════════════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  // Set today's date defaults
+  document.getElementById('exp-date').value = today();
+  const d = new Date();
+  document.getElementById('report-to').value = today();
+  document.getElementById('report-from').value = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+
+  await loadSelectOptions();
+  checkStatus();
+  setInterval(checkStatus, 30000);
+  loadDashboard();
+  setInterval(() => {
+    if (!document.getElementById('page-dashboard').classList.contains('hidden')) loadDashboard();
+  }, 30000);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,3111 @@
+"""WorkDesk — office task, time & client-expense tracker (Intelli Workspace).
+
+Runs on Vercel at intellitaxadvisors.com/employeeworkspace, with data in Supabase:
+Postgres schema `workdesk` (supabase/004_workspace.sql) and files in the private `workspace` Storage bucket.
+The frontend is served as static files from /employeeworkspace/ (employeeworkspace/index.html).
+
+Local run:  DATABASE_URL=… python -m api._workspace.workdesk   →  http://localhost:8060/employeeworkspace/
+"""
+import base64
+import csv
+import hmac
+import json
+import zipfile
+import time
+import re
+import io
+import os
+import secrets
+import uuid
+from datetime import datetime, date, timedelta, timezone
+from functools import wraps
+from pathlib import Path
+
+from flask import Flask, request, jsonify, session, g, send_from_directory, Response, redirect
+from werkzeug.security import generate_password_hash as _gph, check_password_hash
+from werkzeug.utils import secure_filename
+
+from . import pg
+
+# The office works in India time: date.today(), "localtime" in SQL and punch-in times all use IST.
+os.environ["TZ"] = "Asia/Kolkata"
+if hasattr(time, "tzset"):
+    time.tzset()
+
+BASE = "/employeeworkspace"                     # URL prefix of the whole app on the website
+REPO_DIR = Path(__file__).resolve().parents[2]
+STATIC_DIR = REPO_DIR / "employeeworkspace"     # served by Vercel directly; Flask serves it only when run locally
+PORT = int(os.environ.get("PORT", 8060))
+
+RECEIPT_EXT = {"png", "jpg", "jpeg", "gif", "webp", "pdf", "heic", "heif", "tif", "tiff", "bmp"}
+CHAT_EXT = RECEIPT_EXT | {"doc", "docx", "xls", "xlsx", "csv", "txt", "zip", "ppt", "pptx"}
+TASK_STATUSES = ["todo", "in_progress", "on_hold", "review", "done"]
+STAGE_LABEL = {"todo": "Not started", "in_progress": "Working on it", "on_hold": "Paused",
+               "review": "Ready for review", "done": "Completed"}
+PRIORITIES = ["low", "medium", "high", "urgent"]
+EXPENSE_STATUSES = ["pending", "approved", "rejected", "reimbursed"]
+EXPENSE_CATEGORIES = ["Travel", "Conveyance", "Food", "Printing & Stationery", "Courier",
+                      "Govt. Fees", "Software", "Professional Fees", "Accommodation", "Other"]
+
+app = Flask(__name__, static_folder=None)
+
+
+def generate_password_hash(pin):
+    # pbkdf2 works on every Python build (macOS system Python lacks hashlib.scrypt)
+    return _gph(pin, method="pbkdf2:sha256")
+# Vercel accepts request bodies up to 4.5 MB
+MAX_UPLOAD_MB = 4
+app.config["MAX_CONTENT_LENGTH"] = int(4.4 * 1024 * 1024)
+
+
+class PrefixMiddleware:
+    """The app lives under /employeeworkspace; routes below are written without it."""
+    def __init__(self, wsgi):
+        self.wsgi = wsgi
+
+    def __call__(self, environ, start_response):
+        path = environ.get("PATH_INFO", "")
+        if path == BASE or path.startswith(BASE + "/"):
+            environ["PATH_INFO"] = path[len(BASE):] or "/"
+            environ["SCRIPT_NAME"] = BASE
+        return self.wsgi(environ, start_response)
+
+
+app.wsgi_app = PrefixMiddleware(app.wsgi_app)
+
+
+def touch():
+    """Bump the shared change counter; every open WorkDesk tab polls /api/live and refreshes when it moves."""
+    db = get_db()
+    db.execute("UPDATE live SET seq=seq+1 WHERE id=1")
+    db.commit()
+
+
+def utcnow():
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_utc(s):
+    return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+
+
+# ── DB ──────────────────────────────────────────────────────────────────────
+
+SEARCH_PATH = "workdesk, wscompat"
+
+
+def connect():
+    return pg.connect(SEARCH_PATH)
+
+
+def get_db():
+    if "db" not in g:
+        g.db = connect()
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(_e=None):
+    db = g.pop("db", None)
+    if db:
+        db.close()
+
+
+def rows(sql, args=()):
+    return [dict(r) for r in get_db().execute(sql, args).fetchall()]
+
+
+def one(sql, args=()):
+    r = get_db().execute(sql, args).fetchone()
+    return dict(r) if r else None
+
+
+def scalar(sql, args=()):
+    r = get_db().execute(sql, args).fetchone()
+    return r[0] if r else None
+
+
+def execute(sql, args=()):
+    db = get_db()
+    cur = db.execute(sql, args)
+    db.execute("UPDATE live SET seq=seq+1 WHERE id=1")
+    db.commit()
+    return cur.lastrowid
+
+
+def ensure_setup():
+    """First start on a fresh database: keys, the office-wide chat and default settings. Returns the session secret.
+    Tables come from supabase/004_workspace.sql; data from scripts/migrate_workspace.py (no demo data online)."""
+    db = connect()
+    try:
+        if not db.execute("SELECT 1 FROM settings WHERE key='vapid_private'").fetchone():
+            priv, pub = make_vapid_keys()
+            if priv:
+                db.execute("INSERT OR IGNORE INTO settings VALUES ('vapid_private', ?)", (priv,))
+                db.execute("INSERT OR IGNORE INTO settings VALUES ('vapid_public', ?)", (pub,))
+        if not db.execute("SELECT 1 FROM conversations WHERE kind='office'").fetchone():
+            db.execute("INSERT INTO conversations(kind,name) VALUES ('office','Everyone')")
+        office = db.execute("SELECT id FROM conversations WHERE kind='office'").fetchone()[0]
+        db.execute("""INSERT OR IGNORE INTO conversation_members(conversation_id, employee_id, last_read_id)
+                      SELECT ?, id, 0 FROM employees WHERE active=1""", (office,))
+        if not db.execute("SELECT 1 FROM settings WHERE key='secret'").fetchone():
+            db.execute("INSERT OR IGNORE INTO settings VALUES ('secret', ?)", (secrets.token_hex(32),))
+            db.execute("INSERT OR IGNORE INTO settings VALUES ('company', 'Intelli Tax Advisors')")
+            db.execute("INSERT OR IGNORE INTO settings VALUES ('currency', '₹')")
+        db.execute("INSERT OR IGNORE INTO settings VALUES ('office_start', '10:00')")
+        # An empty workspace gets one admin, with the PIN from WORKDESK_BOOTSTRAP_PIN (never a default PIN online).
+        pin = os.environ.get("WORKDESK_BOOTSTRAP_PIN", "")
+        if len(pin) >= 6 and not db.execute("SELECT 1 FROM employees").fetchone():
+            db.execute("INSERT INTO employees(name,designation,role,pin_hash) VALUES ('Admin','Partner','admin',?)",
+                       (generate_password_hash(pin),))
+        db.commit()
+        return db.execute("SELECT value FROM settings WHERE key='secret'").fetchone()[0]
+    finally:
+        db.close()
+
+
+# ── Auth ────────────────────────────────────────────────────────────────────
+
+def me():
+    if "uid" not in g:
+        uid = session.get("uid")
+        g.uid = None
+        g.user = None
+        if uid:
+            u = one("SELECT id,name,role,designation,color,hourly_cost FROM employees WHERE id=? AND active=1", (uid,))
+            if u:
+                g.uid, g.user = u["id"], u
+    return g.user
+
+
+def is_manager():
+    u = me()
+    return bool(u and u["role"] in ("admin", "manager"))
+
+
+def login_required(fn):
+    @wraps(fn)
+    def wrapper(*a, **kw):
+        if not me():
+            return jsonify(error="Please sign in"), 401
+        return fn(*a, **kw)
+    return wrapper
+
+
+def manager_required(fn):
+    @wraps(fn)
+    def wrapper(*a, **kw):
+        if not me():
+            return jsonify(error="Please sign in"), 401
+        if not is_manager():
+            return jsonify(error="Only managers can do this"), 403
+        return fn(*a, **kw)
+    return wrapper
+
+
+def bad(msg, code=400):
+    return jsonify(error=msg), code
+
+
+def log(kind, message, task_id=None, client_id=None):
+    get_db().execute("INSERT INTO activity(actor_id,kind,message,task_id,client_id) VALUES (?,?,?,?,?)",
+                     (g.uid if me() else None, kind, message, task_id, client_id))
+
+
+# ── Phone (Web Push) notifications ──────────────────────────────────────────
+
+def make_vapid_keys():
+    """Create the key pair browsers use to trust our push messages. Returns (private PEM, public base64url)."""
+    try:
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives import serialization
+    except ImportError:
+        return None, None
+    key = ec.generate_private_key(ec.SECP256R1())
+    priv = key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
+                             serialization.NoEncryption()).decode()
+    pub = key.public_key().public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+    return priv, base64.urlsafe_b64encode(pub).decode().rstrip("=")
+
+
+def _send_push_now(subs, payload, vapid_private):
+    try:
+        from pywebpush import webpush, WebPushException
+        from py_vapid import Vapid
+        vapid = Vapid.from_pem(vapid_private.encode())
+    except Exception:
+        return
+    dead = []
+    for sub in subs:
+        try:
+            webpush({"endpoint": sub["endpoint"], "keys": {"p256dh": sub["p256dh"], "auth": sub["auth"]}},
+                    data=json.dumps(payload), vapid_private_key=vapid,
+                    vapid_claims={"sub": "mailto:info@intellitaxadvisors.com"}, ttl=86400, timeout=5)
+        except WebPushException as e:
+            if e.response is not None and e.response.status_code in (404, 410):
+                dead.append(sub["endpoint"])  # phone unsubscribed / app removed
+        except Exception:
+            pass
+    if dead:
+        get_db().executemany("DELETE FROM push_subs WHERE endpoint=?", [(d,) for d in dead])
+        get_db().commit()
+
+
+def send_push(employee_ids, title, body, url="/"):
+    """Buzz these people's phones. Sent before the response: a serverless function may freeze once it has replied."""
+    ids = [i for i in set(employee_ids) if i]
+    if not ids:
+        return
+    subs = rows(f"SELECT endpoint, p256dh, auth FROM push_subs WHERE employee_id IN ({','.join('?' * len(ids))})", ids)
+    key = scalar("SELECT value FROM settings WHERE key='vapid_private'")
+    if subs and key:
+        payload = {"title": title, "body": body[:240], "url": BASE + url}
+        _send_push_now(subs, payload, key)
+
+
+def notify_user(recipient_id, kind, message, task_id=None, url=None, anonymous=False):
+    """In-app bell notification + phone push for one person."""
+    if not recipient_id or recipient_id == g.uid:
+        return
+    get_db().execute("INSERT INTO notifications(recipient_id,actor_id,task_id,kind,message) VALUES (?,?,?,?,?)",
+                     (recipient_id, None if anonymous else g.uid, task_id, kind, message))
+    actor = "WorkDesk" if anonymous or not me() else me()["name"]
+    send_push([recipient_id], actor, message, url or (f"/#/task/{task_id}" if task_id else "/#/dashboard"))
+
+
+def notify_managers(kind, message, task_id=None, url=None, anonymous=False):
+    """Notify every active admin/manager except the person who acted (bell + phone)."""
+    for r in rows("SELECT id FROM employees WHERE active=1 AND role IN ('admin','manager') AND id!=?", (g.uid or 0,)):
+        notify_user(r["id"], kind, message, task_id, url, anonymous)
+
+
+def body():
+    if request.content_type and request.content_type.startswith(("multipart/", "application/x-www-form-urlencoded")):
+        return request.form.to_dict()
+    return request.get_json(silent=True) or {}
+
+
+def num(v, default=0.0):
+    try:
+        return float(v) if v not in (None, "") else default
+    except (TypeError, ValueError):
+        return default
+
+
+def int_or_none(v):
+    try:
+        return int(v) if v not in (None, "", "null") else None
+    except (TypeError, ValueError):
+        return None
+
+
+LOCK_MINUTES, MAX_TRIES_PERSON, MAX_TRIES_IP = 15, 5, 20
+
+
+def client_ip():
+    return (request.headers.get("X-Forwarded-For") or request.remote_addr or "").split(",")[0].strip()[:64]
+
+
+@app.post("/api/login")
+def login():
+    d = body()
+    eid, ip = int_or_none(d.get("employee_id")), client_ip()
+    # PINs are short, so on the open internet wrong guesses lock the account (and the device) for a while.
+    db = get_db()
+    db.execute("DELETE FROM login_attempts WHERE at < now() - interval '1 day'")
+    recent = f"at > now() - interval '{LOCK_MINUTES} minutes'"
+    if (scalar(f"SELECT COUNT(*) FROM login_attempts WHERE employee_id=? AND {recent}", (eid,)) >= MAX_TRIES_PERSON
+            or scalar(f"SELECT COUNT(*) FROM login_attempts WHERE ip=? AND {recent}", (ip,)) >= MAX_TRIES_IP):
+        db.commit()
+        return bad(f"Too many wrong PINs. Try again in {LOCK_MINUTES} minutes, or ask your manager to reset your PIN.", 429)
+    u = one("SELECT * FROM employees WHERE id=? AND active=1", (eid,))
+    if not u or not check_password_hash(u["pin_hash"], str(d.get("pin", ""))):
+        db.execute("INSERT INTO login_attempts(employee_id, ip) VALUES (?,?)", (eid, ip))
+        db.commit()
+        return bad("Wrong PIN", 401)
+    db.execute("DELETE FROM login_attempts WHERE employee_id=?", (eid,))
+    db.commit()
+    session.clear()
+    session["uid"] = u["id"]
+    session.permanent = True
+    return jsonify(ok=True)
+
+
+@app.post("/api/logout")
+def logout():
+    session.clear()
+    return jsonify(ok=True)
+
+
+@app.get("/api/login-options")
+def login_options():
+    return jsonify(employees=rows("SELECT id,name,designation,color FROM employees WHERE active=1 ORDER BY name"),
+                   company=scalar("SELECT value FROM settings WHERE key='company'"))
+
+
+@app.get("/api/me")
+@login_required
+def get_me():
+    return jsonify(user=me(), is_manager=is_manager())
+
+
+@app.put("/api/me/pin")
+@login_required
+def change_pin():
+    d = body()
+    u = one("SELECT pin_hash FROM employees WHERE id=?", (g.uid,))
+    if not check_password_hash(u["pin_hash"], str(d.get("old_pin", ""))):
+        return bad("Current PIN is wrong")
+    new = str(d.get("new_pin", ""))
+    if len(new) < 4:
+        return bad("PIN must be at least 4 digits")
+    execute("UPDATE employees SET pin_hash=? WHERE id=?", (generate_password_hash(new), g.uid))
+    return jsonify(ok=True)
+
+
+# ── Meta / settings ─────────────────────────────────────────────────────────
+
+@app.get("/api/meta")
+@login_required
+def meta():
+    s = {r["key"]: r["value"] for r in rows("SELECT * FROM settings WHERE key!='secret'")}
+    return jsonify(
+        settings=s,
+        clients=rows("SELECT id,name,color,status FROM clients ORDER BY name"),
+        projects=rows("SELECT id,client_id,name,status FROM projects ORDER BY name"),
+        employees=rows("SELECT id,name,color,designation,role,active FROM employees ORDER BY name"),
+        task_statuses=TASK_STATUSES, priorities=PRIORITIES,
+        expense_statuses=EXPENSE_STATUSES, expense_categories=EXPENSE_CATEGORIES,
+    )
+
+
+@app.put("/api/settings")
+@manager_required
+def update_settings():
+    d = body()
+    if "office_start" in d and not re.fullmatch(r"\d{2}:\d{2}", str(d["office_start"])):
+        return bad("Office start time must look like 10:00")
+    for k in ("company", "currency", "office_start"):
+        if k in d:
+            get_db().execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (k, str(d[k]).strip()))
+    get_db().commit()
+    touch()
+    return jsonify(ok=True)
+
+
+# ── Clients ─────────────────────────────────────────────────────────────────
+
+CLIENT_ROLLUP = """
+SELECT c.*,
+  (SELECT COUNT(*) FROM projects p WHERE p.client_id=c.id) AS project_count,
+  (SELECT COALESCE(SUM(fee),0) FROM projects p WHERE p.client_id=c.id) AS fee,
+  (SELECT COALESCE(SUM(budget),0) FROM projects p WHERE p.client_id=c.id) AS budget,
+  (SELECT COUNT(*) FROM tasks t WHERE t.client_id=c.id) AS total_tasks,
+  (SELECT COUNT(*) FROM tasks t WHERE t.client_id=c.id AND t.status!='done') AS open_tasks,
+  (SELECT COUNT(*) FROM tasks t WHERE t.client_id=c.id AND t.status!='done' AND t.due_date < date('now','localtime')) AS overdue_tasks,
+  (SELECT COALESCE(SUM(l.minutes),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id WHERE t.client_id=c.id) AS minutes,
+  (SELECT COALESCE(SUM(l.minutes*e.hourly_cost/60.0),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id
+      JOIN employees e ON e.id=l.employee_id WHERE t.client_id=c.id) AS labour_cost,
+  (SELECT COALESCE(SUM(x.amount),0) FROM expenses x WHERE x.client_id=c.id AND x.status!='rejected') AS expenses
+FROM clients c
+"""
+
+
+@app.get("/api/clients")
+@manager_required
+def list_clients():
+    return jsonify([with_fy(c) for c in rows(CLIENT_ROLLUP + " ORDER BY c.status, c.name")])
+
+
+@app.get("/api/clients/<int:cid>")
+@manager_required
+def client_detail(cid):
+    c = one(CLIENT_ROLLUP + " WHERE c.id=?", (cid,))
+    if not c:
+        return bad("Client not found", 404)
+    c["projects"] = project_rows("WHERE p.client_id=?", (cid,))
+    c["by_employee"] = rows("""
+        SELECT e.id,e.name,e.color, SUM(l.minutes) minutes, SUM(l.minutes*e.hourly_cost/60.0) cost
+        FROM time_logs l JOIN tasks t ON t.id=l.task_id JOIN employees e ON e.id=l.employee_id
+        WHERE t.client_id=? GROUP BY e.id ORDER BY minutes DESC""", (cid,))
+    c["expense_by_category"] = rows("""SELECT category, SUM(amount) amount FROM expenses
+        WHERE client_id=? AND status!='rejected' GROUP BY category ORDER BY amount DESC""", (cid,))
+    c["fees"] = rows("""SELECT f.*, t.title task_title, e.name created_by_name FROM client_fees f
+        LEFT JOIN tasks t ON t.id=f.task_id LEFT JOIN employees e ON e.id=f.created_by
+        WHERE f.client_id=? ORDER BY f.date DESC, f.id DESC""", (cid,))
+    with_fy(c)
+    # retainer schedule for this FY (for the month-by-month strip)
+    c["retainer_schedule"] = []
+    step = RETAINER_STEP.get(c.get("retainer_period") or "none")
+    if step and c.get("retainer_start") and c.get("retainer_amount"):
+        start, end = fy_start(), date(fy_start().year + 1, 3, 31)
+        d0 = datetime.strptime(c["retainer_start"], "%Y-%m-%d").date()
+        stop = min(end, datetime.strptime(c["retainer_end"], "%Y-%m-%d").date()) if c.get("retainer_end") else end
+        i = 0
+        while add_months(d0, i * step) <= stop:
+            due = add_months(d0, i * step)
+            if due >= start:
+                c["retainer_schedule"].append({"date": due.isoformat(), "amount": c["retainer_amount"], "earned": due <= date.today()})
+            i += 1
+    return jsonify(c)
+
+
+CLIENT_FIELDS = ("name", "contact_person", "email", "phone", "gstin", "notes", "color", "status",
+                 "retainer_amount", "retainer_period", "retainer_start", "retainer_end", "retainer_notes")
+RETAINER_STEP = {"monthly": 1, "quarterly": 3, "yearly": 12}
+FEE_STATUSES = ("to_bill", "billed", "paid")
+
+
+def fy_start(d=None):
+    d = d or date.today()
+    return date(d.year if d.month >= 4 else d.year - 1, 4, 1)
+
+
+def retainer_between(c, start, end):
+    """Retainer fees falling due between start and end (inclusive): one charge per period from the start date."""
+    amt, step = float(c.get("retainer_amount") or 0), RETAINER_STEP.get(c.get("retainer_period") or "none")
+    if not amt or not step or not c.get("retainer_start"):
+        return 0.0, 0
+    try:
+        d = datetime.strptime(c["retainer_start"], "%Y-%m-%d").date()
+        stop = min(end, datetime.strptime(c["retainer_end"], "%Y-%m-%d").date()) if c.get("retainer_end") else end
+    except ValueError:
+        return 0.0, 0
+    n, i = 0, 0
+    while True:
+        due = add_months(d, i * step)
+        if due > stop:
+            break
+        if due >= start:
+            n += 1
+        i += 1
+    return amt * n, n
+
+
+def client_money(c, start, end):
+    """Fees earned and costs incurred for one client in a date range."""
+    s_, e_ = start.isoformat(), end.isoformat()
+    ret, n = retainer_between(c, start, end)
+    extra = one("""SELECT COALESCE(SUM(amount),0) total, COALESCE(SUM(CASE WHEN status='to_bill' THEN amount END),0) to_bill,
+        COALESCE(SUM(CASE WHEN status='billed' THEN amount END),0) billed, COALESCE(SUM(CASE WHEN status='paid' THEN amount END),0) paid,
+        COUNT(*) n FROM client_fees WHERE client_id=? AND date BETWEEN ? AND ?""", (c["id"], s_, e_))
+    labour = scalar("""SELECT COALESCE(SUM(l.minutes*e.hourly_cost/60.0),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id
+        JOIN employees e ON e.id=l.employee_id WHERE t.client_id=? AND date(l.started_at,'localtime') BETWEEN ? AND ?""", (c["id"], s_, e_))
+    exp = scalar("SELECT COALESCE(SUM(amount),0) FROM expenses WHERE client_id=? AND status!='rejected' AND date BETWEEN ? AND ?",
+                 (c["id"], s_, e_))
+    fees = ret + extra["total"]
+    return {"retainer": round(ret, 2), "retainer_count": n, "extra": extra["total"], "extra_to_bill": extra["to_bill"],
+            "extra_billed": extra["billed"], "extra_paid": extra["paid"], "extra_count": extra["n"],
+            "fees": round(fees, 2), "cost": round(labour + exp, 2), "margin": round(fees - labour - exp, 2)}
+
+
+def with_fy(c):
+    start = fy_start()
+    c["fy"] = {"label": f"FY {start.year}-{str(start.year + 1)[2:]}", **client_money(c, start, date.today())}
+    return c
+CLIENT_PALETTE = ["#0ea5e9", "#f97316", "#22c55e", "#8b5cf6", "#ef4444", "#eab308", "#14b8a6", "#ec4899",
+                  "#6366f1", "#84cc16", "#f43f5e", "#06b6d4", "#a855f7", "#10b981", "#f59e0b", "#3b82f6",
+                  "#d946ef", "#65a30d", "#0891b2", "#dc2626", "#7c3aed", "#ca8a04", "#059669", "#db2777"]
+
+
+def next_client_color(extra_used=()):
+    """First palette colour no client uses yet; beyond that, spread new hues evenly (golden angle)."""
+    used = {(r["color"] or "").lower() for r in rows("SELECT color FROM clients")} | {c.lower() for c in extra_used}
+    for c in CLIENT_PALETTE:
+        if c not in used:
+            return c
+    import colorsys
+    i = len(used)
+    while True:
+        r, g_, b = colorsys.hls_to_rgb(((i * 137.508) % 360) / 360, 0.5, 0.65)
+        c = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g_ * 255), int(b * 255))
+        if c not in used:
+            return c
+        i += 1
+
+
+def clean_retainer(d):
+    """Normalise retainer fields in-place; returns an error message or None."""
+    if "retainer_amount" in d:
+        d["retainer_amount"] = num(d.get("retainer_amount"))
+        if d["retainer_amount"] < 0:
+            return "Retainer can't be negative"
+    if "retainer_period" in d and d["retainer_period"] not in ("none", "monthly", "quarterly", "yearly"):
+        d["retainer_period"] = "none"
+    for k in ("retainer_start", "retainer_end"):
+        if k in d:
+            d[k] = d[k] or None
+            if d[k] and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d[k]):
+                return "Retainer dates must be valid dates"
+    if d.get("retainer_period", "none") != "none" and num(d.get("retainer_amount")) > 0 and not d.get("retainer_start"):
+        d["retainer_start"] = fy_start().isoformat()
+    if d.get("retainer_start") and d.get("retainer_end") and d["retainer_end"] < d["retainer_start"]:
+        return "Retainer end date is before the start date"
+    return None
+
+
+@app.post("/api/clients/<int:cid>/fees")
+@manager_required
+def add_fee(cid):
+    c = one("SELECT name FROM clients WHERE id=?", (cid,))
+    if not c:
+        return bad("Client not found", 404)
+    d = body()
+    desc, amount = (d.get("description") or "").strip(), num(d.get("amount"))
+    day = d.get("date") or today_local()
+    if not desc or amount <= 0 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        return bad("Enter what the work was, the date and a positive fee")
+    status = d.get("status") if d.get("status") in FEE_STATUSES else "to_bill"
+    task = int_or_none(d.get("task_id"))
+    if task and not scalar("SELECT 1 FROM tasks WHERE id=?", (task,)):
+        task = None
+    fid = execute("INSERT INTO client_fees(client_id,date,description,amount,status,task_id,notes,created_by) VALUES (?,?,?,?,?,?,?,?)",
+                  (cid, day, desc, amount, status, task, d.get("notes") or None, g.uid))
+    log("fee", f"added fee {desc} ({amount:,.0f}) for {c['name']}", task, cid)
+    get_db().commit()
+    return jsonify(id=fid), 201
+
+
+@app.put("/api/fees/<int:fid>")
+@manager_required
+def update_fee(fid):
+    f = one("SELECT * FROM client_fees WHERE id=?", (fid,))
+    if not f:
+        return bad("Fee not found", 404)
+    d = {**f, **body()}
+    desc, amount = (d.get("description") or "").strip(), num(d.get("amount"))
+    if not desc or amount <= 0 or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", d.get("date") or ""):
+        return bad("Enter what the work was, the date and a positive fee")
+    status = d.get("status") if d.get("status") in FEE_STATUSES else f["status"]
+    execute("UPDATE client_fees SET date=?, description=?, amount=?, status=?, notes=? WHERE id=?",
+            (d["date"], desc, amount, status, d.get("notes") or None, fid))
+    return jsonify(ok=True)
+
+
+@app.delete("/api/fees/<int:fid>")
+@manager_required
+def delete_fee(fid):
+    execute("DELETE FROM client_fees WHERE id=?", (fid,))
+    return jsonify(ok=True)
+
+
+@app.get("/api/clients/next-color")
+@manager_required
+def client_next_color():
+    return jsonify(color=next_client_color())
+
+
+@app.post("/api/clients")
+@manager_required
+def create_client():
+    d = body()
+    if not (d.get("name") or "").strip():
+        return bad("Client name is required")
+    err = clean_retainer(d)
+    if err:
+        return bad(err)
+    defaults = {"color": next_client_color(), "status": "active", "retainer_amount": 0, "retainer_period": "none"}
+    cid = execute(f"INSERT INTO clients({','.join(CLIENT_FIELDS)}) VALUES ({','.join('?' * len(CLIENT_FIELDS))})",
+                  [d.get(f) or defaults.get(f) for f in CLIENT_FIELDS])
+    log("client", f"added client {d['name']}", client_id=cid)
+    get_db().commit()
+    return jsonify(id=cid), 201
+
+
+@app.put("/api/clients/<int:cid>")
+@manager_required
+def update_client(cid):
+    d = body()
+    err = clean_retainer(d)
+    if err:
+        return bad(err)
+    fields = [f for f in CLIENT_FIELDS if f in d]
+    if not fields:
+        return bad("Nothing to update")
+    execute(f"UPDATE clients SET {','.join(f + '=?' for f in fields)} WHERE id=?", [d[f] for f in fields] + [cid])
+    return jsonify(ok=True)
+
+
+@app.delete("/api/clients/<int:cid>")
+@manager_required
+def delete_client(cid):
+    c = one("SELECT name FROM clients WHERE id=?", (cid,))
+    if not c:
+        return bad("Client not found", 404)
+    execute("DELETE FROM clients WHERE id=?", (cid,))
+    log("client", f"deleted client {c['name']}")
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+# ── Projects ────────────────────────────────────────────────────────────────
+
+def project_rows(where="", args=()):
+    return rows(f"""
+        SELECT p.*, c.name client_name, c.color client_color,
+          (SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id) total_tasks,
+          (SELECT COUNT(*) FROM tasks t WHERE t.project_id=p.id AND t.status='done') done_tasks,
+          (SELECT COALESCE(SUM(t.estimated_hours),0) FROM tasks t WHERE t.project_id=p.id) estimated_hours,
+          (SELECT COALESCE(SUM(l.minutes),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id WHERE t.project_id=p.id) minutes,
+          (SELECT COALESCE(SUM(l.minutes*e.hourly_cost/60.0),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id
+              JOIN employees e ON e.id=l.employee_id WHERE t.project_id=p.id) labour_cost,
+          (SELECT COALESCE(SUM(x.amount),0) FROM expenses x WHERE x.project_id=p.id AND x.status!='rejected') expenses
+        FROM projects p JOIN clients c ON c.id=p.client_id {where} ORDER BY p.status, p.due_date IS NULL, p.due_date""",
+                args)
+
+
+@app.get("/api/projects")
+@manager_required
+def list_projects():
+    cid = int_or_none(request.args.get("client_id"))
+    return jsonify(project_rows("WHERE p.client_id=?", (cid,)) if cid else project_rows())
+
+
+PROJECT_FIELDS = ("client_id", "name", "description", "budget", "fee", "status", "start_date", "due_date")
+
+
+def project_values(d):
+    return {"client_id": int_or_none(d.get("client_id")), "name": (d.get("name") or "").strip(),
+            "description": d.get("description"), "budget": num(d.get("budget")), "fee": num(d.get("fee")),
+            "status": d.get("status") or "active", "start_date": d.get("start_date") or None,
+            "due_date": d.get("due_date") or None}
+
+
+@app.post("/api/projects")
+@manager_required
+def create_project():
+    v = project_values(body())
+    if not v["name"] or not v["client_id"]:
+        return bad("Project name and client are required")
+    pid = execute(f"INSERT INTO projects({','.join(PROJECT_FIELDS)}) VALUES ({','.join('?' * len(PROJECT_FIELDS))})",
+                  [v[f] for f in PROJECT_FIELDS])
+    log("project", f"created project {v['name']}", client_id=v["client_id"])
+    get_db().commit()
+    return jsonify(id=pid), 201
+
+
+@app.put("/api/projects/<int:pid>")
+@manager_required
+def update_project(pid):
+    d = body()
+    v = project_values(d)
+    fields = [f for f in PROJECT_FIELDS if f in d]
+    execute(f"UPDATE projects SET {','.join(f + '=?' for f in fields)} WHERE id=?", [v[f] for f in fields] + [pid])
+    if "client_id" in d:  # keep task client in sync with project
+        execute("UPDATE tasks SET client_id=? WHERE project_id=?", (v["client_id"], pid))
+    return jsonify(ok=True)
+
+
+@app.delete("/api/projects/<int:pid>")
+@manager_required
+def delete_project(pid):
+    execute("DELETE FROM projects WHERE id=?", (pid,))
+    return jsonify(ok=True)
+
+
+# ── Employees ───────────────────────────────────────────────────────────────
+
+EMP_ROLLUP = """
+SELECT e.id,e.name,e.email,e.phone,e.designation,e.role,e.hourly_cost,e.color,e.active,e.created_at,
+  (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status!='done') open_tasks,
+  (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status='done') done_tasks,
+  (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status!='done' AND t.due_date < date('now','localtime')) overdue_tasks,
+  (SELECT COALESCE(SUM(minutes),0) FROM time_logs l WHERE l.employee_id=e.id
+      AND date(l.started_at,'localtime') = date('now','localtime')) minutes_today,
+  (SELECT COALESCE(SUM(minutes),0) FROM time_logs l WHERE l.employee_id=e.id
+      AND date(l.started_at,'localtime') >= date('now','localtime','weekday 1','-7 days')) minutes_week,
+  (SELECT COALESCE(SUM(minutes),0) FROM time_logs l WHERE l.employee_id=e.id
+      AND strftime('%Y-%m',l.started_at,'localtime') = strftime('%Y-%m','now','localtime')) minutes_month,
+  (SELECT COALESCE(SUM(amount),0) FROM expenses x WHERE x.employee_id=e.id AND x.status IN ('pending','approved')) unreimbursed
+FROM employees e
+"""
+
+
+@app.get("/api/employees")
+@manager_required
+def list_employees():
+    emps = rows(EMP_ROLLUP + " ORDER BY e.active DESC, e.name")
+    running = {r["employee_id"]: r for r in running_timers()}
+    for e in emps:
+        e["running"] = running.get(e["id"])
+    return jsonify(emps)
+
+
+@app.get("/api/employees/<int:eid>")
+@manager_required
+def employee_detail(eid):
+    e = one(EMP_ROLLUP + " WHERE e.id=?", (eid,))
+    if not e:
+        return bad("Employee not found", 404)
+    e["running"] = next((r for r in running_timers() if r["employee_id"] == eid), None)
+    e["by_client"] = rows("""SELECT c.id,c.name,c.color,SUM(l.minutes) minutes FROM time_logs l
+        JOIN tasks t ON t.id=l.task_id LEFT JOIN clients c ON c.id=t.client_id
+        WHERE l.employee_id=? GROUP BY c.id ORDER BY minutes DESC""", (eid,))
+    e["daily"] = rows("""SELECT date(started_at,'localtime') day, SUM(minutes) minutes FROM time_logs
+        WHERE employee_id=? AND date(started_at,'localtime') >= date('now','localtime','-13 days')
+        GROUP BY day ORDER BY day""", (eid,))
+    return jsonify(e)
+
+
+EMP_FIELDS = ("name", "email", "phone", "designation", "role", "hourly_cost", "color", "active")
+
+
+@app.post("/api/employees")
+@manager_required
+def create_employee():
+    d = body()
+    if not (d.get("name") or "").strip():
+        return bad("Name is required")
+    pin = str(d.get("pin") or "")
+    if len(pin) < 4:
+        return bad("Set a PIN of at least 4 digits")
+    role = d.get("role") if d.get("role") in ("admin", "manager", "employee") else "employee"
+    if role == "admin" and me()["role"] != "admin":
+        return bad("Only an admin can create another admin", 403)
+    eid = execute("""INSERT INTO employees(name,email,phone,designation,role,hourly_cost,color,pin_hash)
+                     VALUES (?,?,?,?,?,?,?,?)""",
+                  (d["name"].strip(), d.get("email"), d.get("phone"), d.get("designation"), role,
+                   num(d.get("hourly_cost")), d.get("color") or "#6366f1", generate_password_hash(pin)))
+    office = office_conv_id()
+    get_db().execute("""INSERT OR IGNORE INTO conversation_members(conversation_id, employee_id, last_read_id)
+        VALUES (?, ?, COALESCE((SELECT MAX(id) FROM messages WHERE conversation_id=?), 0))""", (office, eid, office))
+    log("employee", f"added team member {d['name']}")
+    get_db().commit()
+    return jsonify(id=eid), 201
+
+
+@app.put("/api/employees/<int:eid>")
+@manager_required
+def update_employee(eid):
+    d = body()
+    target = one("SELECT role FROM employees WHERE id=?", (eid,))
+    if not target:
+        return bad("Employee not found", 404)
+    if (target["role"] == "admin" or d.get("role") == "admin") and me()["role"] != "admin":
+        return bad("Only an admin can change admin accounts", 403)
+    if eid == g.uid and ("role" in d and d["role"] != me()["role"] or str(d.get("active", 1)) in ("0", "False", "false")):
+        return bad("You can't demote or deactivate yourself")
+    fields = [f for f in EMP_FIELDS if f in d]
+    vals = [num(d[f]) if f == "hourly_cost" else (1 if d[f] in (1, True, "1", "true") else 0) if f == "active"
+            else d[f] for f in fields]
+    if d.get("pin"):
+        if len(str(d["pin"])) < 4:
+            return bad("PIN must be at least 4 digits")
+        fields.append("pin_hash")
+        vals.append(generate_password_hash(str(d["pin"])))
+    if fields:
+        execute(f"UPDATE employees SET {','.join(f + '=?' for f in fields)} WHERE id=?", vals + [eid])
+    if "active" in d and not vals[fields.index("active")]:
+        stop_timer_for(eid)
+    return jsonify(ok=True)
+
+
+# ── Tasks ───────────────────────────────────────────────────────────────────
+
+TASK_SELECT = """
+SELECT t.*, c.name client_name, c.color client_color, p.name project_name,
+  a.name assignee_name, a.color assignee_color, cb.name created_by_name,
+  (SELECT COALESCE(SUM(minutes),0) FROM time_logs l WHERE l.task_id=t.id) minutes,
+  (SELECT COUNT(*) FROM comments m WHERE m.task_id=t.id) comment_count,
+  (SELECT l.started_at FROM time_logs l WHERE l.task_id=t.id AND l.ended_at IS NULL LIMIT 1) running_since,
+  (SELECT e.name FROM time_logs l JOIN employees e ON e.id=l.employee_id WHERE l.task_id=t.id AND l.ended_at IS NULL LIMIT 1) running_by
+FROM tasks t
+LEFT JOIN clients c ON c.id=t.client_id
+LEFT JOIN projects p ON p.id=t.project_id
+LEFT JOIN employees a ON a.id=t.assignee_id
+LEFT JOIN employees cb ON cb.id=t.created_by
+"""
+
+
+def can_see_task(t):
+    return is_manager() or t["assignee_id"] == g.uid
+
+
+@app.get("/api/tasks")
+@login_required
+def list_tasks():
+    where, args = [], []
+    a = request.args
+    if not is_manager() or a.get("mine"):
+        where.append("t.assignee_id=?")
+        args.append(g.uid)
+    for key in ("client_id", "project_id", "assignee_id"):
+        if a.get(key):
+            if a[key] == "none":
+                where.append(f"t.{key} IS NULL")
+            else:
+                where.append(f"t.{key}=?")
+                args.append(int_or_none(a[key]))
+    if a.get("status"):
+        sts = [s for s in a["status"].split(",") if s in TASK_STATUSES]
+        if sts:
+            where.append(f"t.status IN ({','.join('?' * len(sts))})")
+            args += sts
+    if a.get("open"):
+        where.append("t.status!='done'")
+    if a.get("priority") in PRIORITIES:
+        where.append("t.priority=?")
+        args.append(a["priority"])
+    if a.get("self_added"):
+        where.append("t.self_added=1")
+    if a.get("overdue"):
+        where.append("t.status!='done' AND t.due_date < date('now','localtime')")
+    if a.get("q"):
+        where.append("(t.title LIKE ? OR t.description LIKE ?)")
+        args += [f"%{a['q']}%"] * 2
+    sql = TASK_SELECT + (" WHERE " + " AND ".join(where) if where else "") + """
+        ORDER BY CASE t.status WHEN 'done' THEN 1 ELSE 0 END,
+                 CASE t.priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                 t.due_date IS NULL, t.due_date, t.id DESC"""
+    return jsonify(rows(sql, args))
+
+
+@app.get("/api/tasks/<int:tid>")
+@login_required
+def task_detail(tid):
+    t = one(TASK_SELECT + " WHERE t.id=?", (tid,))
+    if not t:
+        return bad("Task not found", 404)
+    if not can_see_task(t):
+        return bad("This task isn't assigned to you", 403)
+    t["time_logs"] = rows("""SELECT l.*, e.name employee_name, e.color employee_color FROM time_logs l
+        JOIN employees e ON e.id=l.employee_id WHERE l.task_id=? ORDER BY l.started_at DESC""", (tid,))
+    t["comments"] = rows("""SELECT m.*, e.name employee_name, e.color employee_color FROM comments m
+        LEFT JOIN employees e ON e.id=m.employee_id WHERE m.task_id=? ORDER BY m.created_at""", (tid,))
+    t["expenses"] = rows("""SELECT x.*, e.name employee_name FROM expenses x LEFT JOIN employees e ON e.id=x.employee_id
+        WHERE x.task_id=? ORDER BY x.date DESC""", (tid,))
+    t["activity"] = rows("""SELECT a.*, e.name actor_name FROM activity a LEFT JOIN employees e ON e.id=a.actor_id
+        WHERE a.task_id=? ORDER BY a.id DESC LIMIT 30""", (tid,))
+    return jsonify(t)
+
+
+def task_values(d):
+    v = {"title": (d.get("title") or "").strip(), "description": d.get("description"),
+         "client_id": int_or_none(d.get("client_id")), "project_id": int_or_none(d.get("project_id")),
+         "assignee_id": int_or_none(d.get("assignee_id")),
+         "priority": d.get("priority") if d.get("priority") in PRIORITIES else "medium",
+         "status": d.get("status") if d.get("status") in TASK_STATUSES else "todo",
+         "due_date": d.get("due_date") or None, "estimated_hours": num(d.get("estimated_hours"))}
+    # drop links to clients/projects/people that no longer exist instead of failing
+    if v["client_id"] and not scalar("SELECT 1 FROM clients WHERE id=?", (v["client_id"],)):
+        v["client_id"] = None
+    if v["project_id"] and not scalar("SELECT 1 FROM projects WHERE id=?", (v["project_id"],)):
+        v["project_id"] = None
+    if v["assignee_id"] and not scalar("SELECT 1 FROM employees WHERE id=?", (v["assignee_id"],)):
+        v["assignee_id"] = None
+    if v["project_id"]:  # a project always implies its client
+        v["client_id"] = scalar("SELECT client_id FROM projects WHERE id=?", (v["project_id"],)) or v["client_id"]
+    return v
+
+
+def emp_name(eid):
+    return scalar("SELECT name FROM employees WHERE id=?", (eid,)) if eid else "nobody"
+
+
+@app.post("/api/tasks")
+@login_required
+def create_task():
+    """Managers assign tasks. Anyone can add their own work (self_added) — managers get notified."""
+    d = body()
+    self_added = bool(d.get("self_added")) or not is_manager()
+    if self_added:
+        d["assignee_id"] = g.uid
+    v = task_values(d)
+    if not v["title"]:
+        return bad("Please describe the work")
+    tid = execute("""INSERT INTO tasks(title,description,client_id,project_id,assignee_id,created_by,priority,status,
+                     due_date,estimated_hours,completed_at,self_added) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (v["title"], v["description"], v["client_id"], v["project_id"], v["assignee_id"], g.uid,
+                   v["priority"], v["status"], v["due_date"], v["estimated_hours"],
+                   utcnow() if v["status"] == "done" else None, 1 if self_added else 0))
+    if self_added:
+        cname = scalar("SELECT name FROM clients WHERE id=?", (v["client_id"],)) if v["client_id"] else "office work"
+        stage = STAGE_LABEL[v["status"]]
+        log("self", f"added own work “{v['title']}” for {cname} ({stage})", tid, v["client_id"])
+        msg = f"added work: “{v['title']}” for {cname} — {stage}"
+        # optional time already spent on it
+        mins = int(num(d.get("minutes")))
+        if 0 < mins <= 24 * 60:
+            try:
+                day = datetime.strptime(d.get("work_date") or date.today().isoformat(), "%Y-%m-%d")
+            except ValueError:
+                day = datetime.combine(date.today(), datetime.min.time())
+            start = day.replace(hour=10).astimezone(timezone.utc)
+            get_db().execute("INSERT INTO time_logs(task_id,employee_id,started_at,ended_at,minutes,note,source) VALUES (?,?,?,?,?,?,'manual')",
+                             (tid, g.uid, start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                              (start + timedelta(minutes=mins)).strftime("%Y-%m-%dT%H:%M:%SZ"), mins, d.get("description")))
+            msg += f" · {mins // 60}h {mins % 60}m"
+        notify_managers("self_added", msg, tid)
+    else:
+        log("assign", f"assigned “{v['title']}” to {emp_name(v['assignee_id'])}", tid, v["client_id"])
+        due = f" · due {datetime.strptime(v['due_date'], '%Y-%m-%d').strftime('%d %b')}" if v["due_date"] else ""
+        notify_user(v["assignee_id"], "assign", f"gave you a task: “{v['title']}”{due}", tid)
+    get_db().commit()
+    return jsonify(id=tid), 201
+
+
+@app.put("/api/tasks/<int:tid>")
+@login_required
+def update_task(tid):
+    t = one("SELECT * FROM tasks WHERE id=?", (tid,))
+    if not t:
+        return bad("Task not found", 404)
+    if not can_see_task(t):
+        return bad("This task isn't assigned to you", 403)
+    d = body()
+    own_work = bool(t["self_added"]) and t["assignee_id"] == g.uid
+    if not is_manager():
+        # staff may edit everything on work they added themselves; on assigned tasks only the stage
+        allowed = ("title", "description", "client_id", "project_id", "priority", "status", "due_date", "estimated_hours") if own_work else ("status",)
+        d = {k: d[k] for k in allowed if k in d}
+    v = task_values({**t, **d})
+    if not v["title"]:
+        return bad("Task title is required")
+    completed_at = t["completed_at"]
+    if v["status"] == "done" and t["status"] != "done":
+        completed_at = utcnow()
+    elif v["status"] != "done":
+        completed_at = None
+    execute("""UPDATE tasks SET title=?,description=?,client_id=?,project_id=?,assignee_id=?,priority=?,status=?,
+               due_date=?,estimated_hours=?,completed_at=?,updated_at=? WHERE id=?""",
+            (v["title"], v["description"], v["client_id"], v["project_id"], v["assignee_id"], v["priority"],
+             v["status"], v["due_date"], v["estimated_hours"], completed_at, utcnow(), tid))
+    if v["status"] != t["status"]:
+        log("status", f"moved “{v['title']}” to {STAGE_LABEL[v['status']]}", tid, v["client_id"])
+        if own_work:
+            notify_managers("status", f"moved their work “{v['title']}” to {STAGE_LABEL[v['status']]}", tid)
+        elif not is_manager() and v["status"] in ("review", "done"):
+            notify_managers("status", f"marked “{v['title']}” as {STAGE_LABEL[v['status']]}", tid)
+        if v["status"] == "done":
+            get_db().execute("""UPDATE time_logs SET ended_at=?, minutes=GREATEST(1, CAST(ROUND((julianday(?)-julianday(started_at))*1440) AS INTEGER))
+                                WHERE task_id=? AND ended_at IS NULL""", (utcnow(), utcnow(), tid))
+    if v["assignee_id"] != t["assignee_id"]:
+        log("assign", f"reassigned “{v['title']}” to {emp_name(v['assignee_id'])}", tid, v["client_id"])
+        notify_user(v["assignee_id"], "assign", f"gave you a task: “{v['title']}”", tid)
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/tasks/<int:tid>")
+@login_required
+def delete_task(tid):
+    t = one("SELECT title, client_id, self_added, assignee_id FROM tasks WHERE id=?", (tid,))
+    if not t:
+        return bad("Task not found", 404)
+    if not is_manager() and not (t["self_added"] and t["assignee_id"] == g.uid):
+        return bad("Only managers can delete assigned tasks", 403)
+    execute("DELETE FROM tasks WHERE id=?", (tid,))
+    log("task", f"deleted task “{t['title']}”", client_id=t["client_id"])
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.post("/api/tasks/<int:tid>/comments")
+@login_required
+def add_comment(tid):
+    t = one("SELECT * FROM tasks WHERE id=?", (tid,))
+    if not t or not can_see_task(t):
+        return bad("Task not found", 404)
+    text = (body().get("body") or "").strip()
+    if not text:
+        return bad("Comment is empty")
+    execute("INSERT INTO comments(task_id,employee_id,body) VALUES (?,?,?)", (tid, g.uid, text))
+    log("comment", f"commented on “{t['title']}”", tid, t["client_id"])
+    get_db().commit()
+    return jsonify(ok=True), 201
+
+
+# ── Timer & time logs ───────────────────────────────────────────────────────
+
+def running_timers():
+    return rows("""SELECT l.id, l.employee_id, l.task_id, l.started_at, t.title task_title, t.status task_status,
+        c.id client_id, c.name client_name, c.color client_color, e.name employee_name, e.color employee_color
+        FROM time_logs l JOIN tasks t ON t.id=l.task_id JOIN employees e ON e.id=l.employee_id
+        LEFT JOIN clients c ON c.id=t.client_id WHERE l.ended_at IS NULL""")
+
+
+def stop_timer_for(eid, note=None):
+    r = one("SELECT l.*, t.title, t.client_id FROM time_logs l JOIN tasks t ON t.id=l.task_id WHERE l.employee_id=? AND l.ended_at IS NULL",
+            (eid,))
+    if not r:
+        return None
+    end = utcnow()
+    mins = max(1, round((parse_utc(end) - parse_utc(r["started_at"])).total_seconds() / 60))
+    get_db().execute("UPDATE time_logs SET ended_at=?, minutes=?, note=COALESCE(?,note) WHERE id=?",
+                     (end, mins, note or None, r["id"]))
+    log("timer", f"stopped work on “{r['title']}” ({mins // 60}h {mins % 60}m)", r["task_id"], r["client_id"])
+    get_db().commit()
+    touch()
+    return mins
+
+
+@app.get("/api/timer")
+@login_required
+def current_timer():
+    return jsonify(next((r for r in running_timers() if r["employee_id"] == g.uid), None))
+
+
+@app.post("/api/timer/start")
+@login_required
+def start_timer():
+    tid = int_or_none(body().get("task_id"))
+    t = one("SELECT * FROM tasks WHERE id=?", (tid,))
+    if not t or not can_see_task(t):
+        return bad("Task not found", 404)
+    if t["status"] == "done":
+        return bad("This task is already done — reopen it first")
+    stop_timer_for(g.uid)
+    execute("INSERT INTO time_logs(task_id,employee_id,started_at) VALUES (?,?,?)", (tid, g.uid, utcnow()))
+    if t["status"] in ("todo", "on_hold"):
+        get_db().execute("UPDATE tasks SET status='in_progress', updated_at=? WHERE id=?", (utcnow(), tid))
+    log("timer", f"started working on “{t['title']}”", tid, t["client_id"])
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.post("/api/timer/stop")
+@login_required
+def stop_timer():
+    d = body()
+    mins = stop_timer_for(g.uid, d.get("note"))
+    return jsonify(ok=True, minutes=mins)
+
+
+@app.post("/api/employees/<int:eid>/stop-timer")
+@manager_required
+def force_stop(eid):
+    return jsonify(ok=True, minutes=stop_timer_for(eid))
+
+
+def timelog_filters():
+    a = request.args
+    where, args = ["l.ended_at IS NOT NULL"], []
+    if not is_manager() or a.get("mine"):
+        where.append("l.employee_id=?")
+        args.append(g.uid)
+    elif a.get("employee_id"):
+        where.append("l.employee_id=?")
+        args.append(int_or_none(a["employee_id"]))
+    for key, col in (("client_id", "t.client_id"), ("project_id", "t.project_id"), ("task_id", "l.task_id")):
+        if a.get(key):
+            where.append(f"{col}=?")
+            args.append(int_or_none(a[key]))
+    if a.get("from"):
+        where.append("date(l.started_at,'localtime') >= ?")
+        args.append(a["from"])
+    if a.get("to"):
+        where.append("date(l.started_at,'localtime') <= ?")
+        args.append(a["to"])
+    return " AND ".join(where), args
+
+
+TIMELOG_SELECT = """SELECT l.*, date(l.started_at,'localtime') day, t.title task_title, t.client_id, t.project_id,
+    c.name client_name, c.color client_color, p.name project_name, e.name employee_name, e.color employee_color,
+    ROUND(l.minutes*e.hourly_cost/60.0, 2) cost
+    FROM time_logs l JOIN tasks t ON t.id=l.task_id JOIN employees e ON e.id=l.employee_id
+    LEFT JOIN clients c ON c.id=t.client_id LEFT JOIN projects p ON p.id=t.project_id"""
+
+
+@app.get("/api/timelogs")
+@login_required
+def list_timelogs():
+    where, args = timelog_filters()
+    data = rows(f"{TIMELOG_SELECT} WHERE {where} ORDER BY l.started_at DESC, l.id LIMIT 1000", args)
+    if not is_manager():
+        for r in data:
+            r.pop("cost", None)
+    return jsonify(data)
+
+
+@app.post("/api/timelogs")
+@login_required
+def add_timelog():
+    """Manual entry: {task_id, date, minutes, note, employee_id?}"""
+    d = body()
+    t = one("SELECT * FROM tasks WHERE id=?", (int_or_none(d.get("task_id")),))
+    if not t or not can_see_task(t):
+        return bad("Pick a task")
+    mins = int(num(d.get("minutes")))
+    if mins <= 0 or mins > 24 * 60:
+        return bad("Enter time between 1 minute and 24 hours")
+    eid = int_or_none(d.get("employee_id")) if is_manager() and d.get("employee_id") else g.uid
+    try:
+        day = datetime.strptime(d.get("date") or date.today().isoformat(), "%Y-%m-%d")
+    except ValueError:
+        return bad("Invalid date")
+    start = day.replace(hour=10).astimezone(timezone.utc)  # naive → local → UTC
+    end = start + timedelta(minutes=mins)
+    execute("INSERT INTO time_logs(task_id,employee_id,started_at,ended_at,minutes,note,source) VALUES (?,?,?,?,?,?,'manual')",
+            (t["id"], eid, start.strftime("%Y-%m-%dT%H:%M:%SZ"), end.strftime("%Y-%m-%dT%H:%M:%SZ"), mins, d.get("note")))
+    log("timer", f"logged {mins // 60}h {mins % 60}m on “{t['title']}”" + ("" if eid == g.uid else f" for {emp_name(eid)}"),
+        t["id"], t["client_id"])
+    get_db().commit()
+    return jsonify(ok=True), 201
+
+
+@app.put("/api/timelogs/<int:lid>")
+@login_required
+def update_timelog(lid):
+    l = one("SELECT * FROM time_logs WHERE id=?", (lid,))
+    if not l or (not is_manager() and l["employee_id"] != g.uid):
+        return bad("Entry not found", 404)
+    d = body()
+    mins = int(num(d.get("minutes"), l["minutes"]))
+    if mins <= 0:
+        return bad("Minutes must be positive")
+    execute("UPDATE time_logs SET minutes=?, note=? WHERE id=?", (mins, d.get("note", l["note"]), lid))
+    return jsonify(ok=True)
+
+
+@app.delete("/api/timelogs/<int:lid>")
+@login_required
+def delete_timelog(lid):
+    l = one("SELECT * FROM time_logs WHERE id=?", (lid,))
+    if not l or (not is_manager() and l["employee_id"] != g.uid):
+        return bad("Entry not found", 404)
+    execute("DELETE FROM time_logs WHERE id=?", (lid,))
+    return jsonify(ok=True)
+
+
+# ── Expenses ────────────────────────────────────────────────────────────────
+
+def expense_filters():
+    a = request.args
+    where, args = [], []
+    if not is_manager() or a.get("mine"):
+        where.append("x.employee_id=?")
+        args.append(g.uid)
+    elif a.get("employee_id"):
+        where.append("x.employee_id=?")
+        args.append(int_or_none(a["employee_id"]))
+    for key in ("client_id", "project_id", "task_id"):
+        if a.get(key):
+            if a[key] == "none":
+                where.append(f"x.{key} IS NULL")
+            else:
+                where.append(f"x.{key}=?")
+                args.append(int_or_none(a[key]))
+    if a.get("status") in EXPENSE_STATUSES:
+        where.append("x.status=?")
+        args.append(a["status"])
+    if a.get("category"):
+        where.append("x.category=?")
+        args.append(a["category"])
+    if a.get("from"):
+        where.append("x.date >= ?")
+        args.append(a["from"])
+    if a.get("to"):
+        where.append("x.date <= ?")
+        args.append(a["to"])
+    return (" WHERE " + " AND ".join(where)) if where else "", args
+
+
+EXPENSE_SELECT = """SELECT x.*, c.name client_name, c.color client_color, p.name project_name, t.title task_title,
+    e.name employee_name, e.color employee_color FROM expenses x
+    LEFT JOIN clients c ON c.id=x.client_id LEFT JOIN projects p ON p.id=x.project_id
+    LEFT JOIN tasks t ON t.id=x.task_id LEFT JOIN employees e ON e.id=x.employee_id"""
+
+
+@app.get("/api/expenses")
+@login_required
+def list_expenses():
+    where, args = expense_filters()
+    return jsonify(rows(f"{EXPENSE_SELECT}{where} ORDER BY x.date DESC, x.id DESC LIMIT 1000", args))
+
+
+def save_receipt():
+    f = request.files.get("receipt")
+    if not f or not f.filename:
+        return None, None
+    ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+    if ext not in RECEIPT_EXT:
+        raise ValueError("Receipt must be an image or PDF")
+    name = f"{uuid.uuid4().hex}.{ext}"
+    pg.put_file("receipts/" + name, f.read(), f.mimetype)
+    return name, secure_filename(f.filename) or name
+
+
+def expense_values(d):
+    v = {"title": (d.get("title") or "").strip(), "amount": num(d.get("amount")),
+         "category": d.get("category") or "Other", "date": d.get("date") or date.today().isoformat(),
+         "client_id": int_or_none(d.get("client_id")), "project_id": int_or_none(d.get("project_id")),
+         "task_id": int_or_none(d.get("task_id")),
+         "billable": 0 if str(d.get("billable", "1")).lower() in ("0", "false", "off") else 1,
+         "notes": d.get("notes")}
+    if v["task_id"]:
+        t = one("SELECT client_id, project_id FROM tasks WHERE id=?", (v["task_id"],))
+        if t:
+            v["client_id"] = t["client_id"] or v["client_id"]
+            v["project_id"] = t["project_id"] or v["project_id"]
+    if v["project_id"]:
+        v["client_id"] = scalar("SELECT client_id FROM projects WHERE id=?", (v["project_id"],)) or v["client_id"]
+    return v
+
+
+@app.post("/api/expenses")
+@login_required
+def create_expense():
+    d = body()
+    v = expense_values(d)
+    if not v["title"] or v["amount"] <= 0:
+        return bad("Description and a positive amount are required")
+    eid = int_or_none(d.get("employee_id")) if is_manager() and d.get("employee_id") else g.uid
+    status = d.get("status") if is_manager() and d.get("status") in EXPENSE_STATUSES else "pending"
+    try:
+        rf, rn = save_receipt()
+    except ValueError as e:
+        return bad(str(e))
+    scanned = d.get("scan_file")
+    if not rf and scanned and scalar("SELECT owner_id FROM scans WHERE file=?", (scanned,)) == g.uid:
+        rf, rn = scanned, (d.get("scan_name") or scanned)[:120]
+        get_db().execute("DELETE FROM scans WHERE file=?", (scanned,))
+    xid = execute("""INSERT INTO expenses(title,amount,category,date,client_id,project_id,task_id,employee_id,billable,
+                     status,notes,receipt_file,receipt_name) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (v["title"], v["amount"], v["category"], v["date"], v["client_id"], v["project_id"], v["task_id"],
+                   eid, v["billable"], status, v["notes"], rf, rn))
+    cname = scalar("SELECT name FROM clients WHERE id=?", (v["client_id"],)) if v["client_id"] else "office"
+    log("expense", f"added expense {v['title']} ({v['amount']:,.0f}) for {cname}", v["task_id"], v["client_id"])
+    get_db().commit()
+    return jsonify(id=xid), 201
+
+
+@app.put("/api/expenses/<int:xid>")
+@login_required
+def update_expense(xid):
+    x = one("SELECT * FROM expenses WHERE id=?", (xid,))
+    if not x:
+        return bad("Expense not found", 404)
+    mgr = is_manager()
+    if not mgr and (x["employee_id"] != g.uid or x["status"] != "pending"):
+        return bad("You can only edit your own pending expenses", 403)
+    d = body()
+    v = expense_values({**x, **d})
+    if not v["title"] or v["amount"] <= 0:
+        return bad("Description and a positive amount are required")
+    status = d.get("status") if mgr and d.get("status") in EXPENSE_STATUSES else x["status"]
+    try:
+        rf, rn = save_receipt()
+    except ValueError as e:
+        return bad(str(e))
+    execute("""UPDATE expenses SET title=?,amount=?,category=?,date=?,client_id=?,project_id=?,task_id=?,billable=?,
+               notes=?,status=?,receipt_file=COALESCE(?,receipt_file),receipt_name=COALESCE(?,receipt_name) WHERE id=?""",
+            (v["title"], v["amount"], v["category"], v["date"], v["client_id"], v["project_id"], v["task_id"],
+             v["billable"], v["notes"], status, rf, rn, xid))
+    if status != x["status"]:
+        log("expense", f"marked expense {v['title']} as {status}", v["task_id"], v["client_id"])
+        get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/expenses/<int:xid>")
+@login_required
+def delete_expense(xid):
+    x = one("SELECT * FROM expenses WHERE id=?", (xid,))
+    if not x or (not is_manager() and (x["employee_id"] != g.uid or x["status"] != "pending")):
+        return bad("Expense not found", 404)
+    execute("DELETE FROM expenses WHERE id=?", (xid,))
+    if x["receipt_file"]:
+        delete_quietly(["receipts/" + x["receipt_file"]])
+    return jsonify(ok=True)
+
+
+def delete_quietly(paths):
+    """Remove stored files; the database row is already gone, so a storage hiccup shouldn't fail the request."""
+    try:
+        pg.delete_files(paths)
+    except Exception as e:
+        print(f"[storage] delete failed: {e}", flush=True)
+
+
+def stored_file(path, download_name=None):
+    """Send the browser to a short-lived signed link for a private file (the caller has checked access)."""
+    try:
+        resp = redirect(pg.signed_url(path, download_name), 302)
+    except Exception:
+        return bad("File not found", 404)
+    resp.headers["Cache-Control"] = "private, no-store"
+    return resp
+
+
+@app.get("/receipts/<path:name>")
+@login_required
+def receipt(name):
+    x = one("SELECT employee_id FROM expenses WHERE receipt_file=?", (name,))
+    if not x or (not is_manager() and x["employee_id"] != g.uid):
+        return bad("Not found", 404)
+    return stored_file("receipts/" + name)
+
+
+# ── Dashboard, live, reports ────────────────────────────────────────────────
+
+@app.get("/api/notifications")
+@login_required
+def list_notifications():
+    items = rows("""SELECT n.*, e.name actor_name, e.color actor_color FROM notifications n
+        LEFT JOIN employees e ON e.id=n.actor_id WHERE n.recipient_id=? ORDER BY n.id DESC LIMIT 60""", (g.uid,))
+    return jsonify(items=items, unread=sum(1 for n in items if not n["is_read"]))
+
+
+@app.post("/api/notifications/read")
+@login_required
+def read_notifications():
+    ids = [int_or_none(i) for i in (body().get("ids") or [])]
+    if ids:
+        get_db().execute(f"UPDATE notifications SET is_read=1 WHERE recipient_id=? AND id IN ({','.join('?' * len(ids))})",
+                         [g.uid] + ids)
+    else:
+        get_db().execute("UPDATE notifications SET is_read=1 WHERE recipient_id=?", (g.uid,))
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.get("/api/live")
+@login_required
+def live():
+    timers = running_timers()
+    if not is_manager():
+        timers = [t for t in timers if t["employee_id"] == g.uid]
+    latest = one("""SELECT n.id, n.message, e.name actor_name FROM notifications n LEFT JOIN employees e ON e.id=n.actor_id
+        WHERE n.recipient_id=? AND n.is_read=0 ORDER BY n.id DESC LIMIT 1""", (g.uid,))
+    unread = scalar("SELECT COUNT(*) FROM notifications WHERE recipient_id=? AND is_read=0", (g.uid,))
+    ensure_office_member()
+    chat = one(f"""SELECT COUNT(*) n, MAX(m.id) last_id FROM messages m
+        JOIN conversation_members cm ON cm.conversation_id=m.conversation_id AND cm.employee_id=?
+        WHERE m.id > cm.last_read_id AND COALESCE(m.sender_id,0)!=? AND m.deleted=0""", (g.uid, g.uid))
+    chat_latest = None
+    if chat["last_id"]:
+        chat_latest = one("""SELECT m.id, m.conversation_id, m.body, m.file_name, e.name sender_name, c.kind, c.name conv_name
+            FROM messages m LEFT JOIN employees e ON e.id=m.sender_id JOIN conversations c ON c.id=m.conversation_id
+            WHERE m.id=?""", (chat["last_id"],))
+    lv = one("SELECT boot, seq FROM live WHERE id=1")
+    return jsonify(seq=f"{lv['boot']}-{lv['seq']}", now=utcnow(), timers=timers, unread=unread, latest=latest,
+                   chat_unread=chat["n"], chat_latest=chat_latest, attendance=my_today(g.uid),
+                   suggestions_new=scalar("SELECT COUNT(*) FROM suggestions WHERE status='new'") if is_manager() else 0)
+
+
+@app.get("/api/dashboard")
+@login_required
+def dashboard():
+    mine = bool(request.args.get("mine"))
+    mgr = is_manager() and not mine
+    scope_t, scope_l, scope_x, args = "", "", "", ()
+    if not mgr:
+        scope_t, scope_l, scope_x, args = " AND t.assignee_id=?", " AND l.employee_id=?", " AND x.employee_id=?", (g.uid,)
+    k = {
+        "open_tasks": scalar(f"SELECT COUNT(*) FROM tasks t WHERE status!='done'{scope_t}", args),
+        "in_progress": scalar(f"SELECT COUNT(*) FROM tasks t WHERE status='in_progress'{scope_t}", args),
+        "in_review": scalar(f"SELECT COUNT(*) FROM tasks t WHERE status='review'{scope_t}", args),
+        "overdue": scalar(f"SELECT COUNT(*) FROM tasks t WHERE status!='done' AND due_date < date('now','localtime'){scope_t}", args),
+        "done_week": scalar(f"""SELECT COUNT(*) FROM tasks t WHERE status='done'
+            AND date(completed_at,'localtime') >= date('now','localtime','weekday 1','-7 days'){scope_t}""", args),
+        "minutes_today": scalar(f"""SELECT COALESCE(SUM(minutes),0) FROM time_logs l
+            WHERE date(started_at,'localtime')=date('now','localtime'){scope_l}""", args),
+        "minutes_week": scalar(f"""SELECT COALESCE(SUM(minutes),0) FROM time_logs l
+            WHERE date(started_at,'localtime') >= date('now','localtime','weekday 1','-7 days'){scope_l}""", args),
+        "expenses_month": scalar(f"""SELECT COALESCE(SUM(amount),0) FROM expenses x WHERE status!='rejected'
+            AND strftime('%Y-%m',date)=strftime('%Y-%m','now','localtime'){scope_x}""", args),
+        "pending_expenses": scalar(f"SELECT COUNT(*) FROM expenses x WHERE status='pending'{scope_x}", args),
+    }
+    due = rows(TASK_SELECT + f""" WHERE t.status!='done' AND t.due_date IS NOT NULL
+        AND t.due_date <= date('now','localtime','+7 days'){scope_t} ORDER BY t.due_date LIMIT 12""", args)
+    out = {"kpis": k, "due_soon": due}
+    if mgr:
+        out["team"] = rows(EMP_ROLLUP + " WHERE e.active=1 ORDER BY e.name")
+        running = {r["employee_id"]: r for r in running_timers()}
+        for e in out["team"]:
+            e["running"] = running.get(e["id"])
+            e["last_active"] = scalar("SELECT MAX(COALESCE(ended_at, started_at)) FROM time_logs WHERE employee_id=?", (e["id"],))
+            att = attendance_days(e["id"], today_local(), today_local())[0]
+            e["att_status"], e["att_in"] = att["status"], att["first_in"]
+            e["att_open"] = att["open"]
+        out["hours_by_client"] = rows("""SELECT COALESCE(c.name,'No client') name, COALESCE(c.color,'#94a3b8') color,
+            SUM(l.minutes) minutes FROM time_logs l JOIN tasks t ON t.id=l.task_id LEFT JOIN clients c ON c.id=t.client_id
+            WHERE date(l.started_at,'localtime') >= date('now','localtime','-29 days') GROUP BY c.id ORDER BY minutes DESC""")
+        out["expense_by_client"] = rows("""SELECT COALESCE(c.name,'Office / no client') name, COALESCE(c.color,'#94a3b8') color,
+            SUM(x.amount) amount FROM expenses x LEFT JOIN clients c ON c.id=x.client_id
+            WHERE x.status!='rejected' AND x.date >= date('now','localtime','-29 days') GROUP BY c.id ORDER BY amount DESC""")
+        out["status_counts"] = {r["status"]: r["n"] for r in rows("SELECT status, COUNT(*) n FROM tasks GROUP BY status")}
+    out["activity"] = activity_rows(20, mine)
+    out["holidays"] = rows("SELECT day, name FROM holidays WHERE day>=? ORDER BY day LIMIT 4", (today_local(),))
+    extend_series()
+    out["compliance"] = rows(COMPLIANCE_SELECT + """ WHERE c.status='pending' AND c.due_date <= ?
+        ORDER BY c.due_date LIMIT 8""", ((date.today() + timedelta(days=14)).isoformat(),))
+    out["compliance_overdue"] = scalar("SELECT COUNT(*) FROM compliance WHERE status='pending' AND due_date < ?", (today_local(),))
+    return jsonify(out)
+
+
+def activity_rows(limit, mine=False):
+    where, args = "", []
+    if mine or not is_manager():
+        where = "WHERE a.actor_id=? OR a.task_id IN (SELECT id FROM tasks WHERE assignee_id=?)"
+        args = [g.uid, g.uid]
+    return rows(f"""SELECT a.*, e.name actor_name, e.color actor_color FROM activity a
+        LEFT JOIN employees e ON e.id=a.actor_id {where} ORDER BY a.id DESC LIMIT ?""", args + [limit])
+
+
+@app.get("/api/activity")
+@login_required
+def activity():
+    return jsonify(activity_rows(min(int(num(request.args.get("limit"), 100)), 500)))
+
+
+@app.get("/api/reports")
+@manager_required
+def reports():
+    a = request.args
+    frm = a.get("from") or (date.today().replace(day=1)).isoformat()
+    to = a.get("to") or date.today().isoformat()
+    lw = "date(l.started_at,'localtime') BETWEEN ? AND ? AND l.ended_at IS NOT NULL"
+    by_client = rows(f"""
+        SELECT c.id, c.name, c.color,
+          (SELECT COALESCE(SUM(l.minutes),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id WHERE t.client_id=c.id AND {lw}) minutes,
+          (SELECT COALESCE(SUM(l.minutes*e.hourly_cost/60.0),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id
+              JOIN employees e ON e.id=l.employee_id WHERE t.client_id=c.id AND {lw}) labour_cost,
+          (SELECT COALESCE(SUM(amount),0) FROM expenses x WHERE x.client_id=c.id AND x.status!='rejected' AND x.date BETWEEN ? AND ?) expenses,
+          (SELECT COALESCE(SUM(amount),0) FROM expenses x WHERE x.client_id=c.id AND x.status!='rejected' AND x.billable=1 AND x.date BETWEEN ? AND ?) billable_expenses,
+          (SELECT COUNT(*) FROM tasks t WHERE t.client_id=c.id AND t.status='done' AND date(t.completed_at,'localtime') BETWEEN ? AND ?) tasks_done,
+          (SELECT COUNT(*) FROM tasks t WHERE t.client_id=c.id AND t.status!='done') open_tasks
+        FROM clients c ORDER BY c.name""", [frm, to] * 5)
+    by_employee = rows(f"""
+        SELECT e.id, e.name, e.color, e.designation, e.hourly_cost,
+          (SELECT COALESCE(SUM(l.minutes),0) FROM time_logs l WHERE l.employee_id=e.id AND {lw}) minutes,
+          (SELECT COUNT(DISTINCT date(l.started_at,'localtime')) FROM time_logs l WHERE l.employee_id=e.id AND {lw}) days_worked,
+          (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status='done' AND date(t.completed_at,'localtime') BETWEEN ? AND ?) tasks_done,
+          (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status!='done') open_tasks,
+          (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status!='done' AND t.due_date < date('now','localtime')) overdue,
+          (SELECT COALESCE(SUM(amount),0) FROM expenses x WHERE x.employee_id=e.id AND x.status!='rejected' AND x.date BETWEEN ? AND ?) expenses
+        FROM employees e WHERE e.active=1 ORDER BY e.name""", [frm, to] * 4)
+    matrix = rows(f"""SELECT e.id employee_id, COALESCE(t.client_id,0) client_id, SUM(l.minutes) minutes
+        FROM time_logs l JOIN tasks t ON t.id=l.task_id JOIN employees e ON e.id=l.employee_id
+        WHERE {lw} GROUP BY e.id, t.client_id""", [frm, to])
+    by_project = rows(f"""
+        SELECT p.id, p.name, p.fee, p.budget, c.name client_name, c.color client_color,
+          (SELECT COALESCE(SUM(l.minutes),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id WHERE t.project_id=p.id AND {lw}) minutes,
+          (SELECT COALESCE(SUM(l.minutes*e.hourly_cost/60.0),0) FROM time_logs l JOIN tasks t ON t.id=l.task_id
+              JOIN employees e ON e.id=l.employee_id WHERE t.project_id=p.id AND {lw}) labour_cost,
+          (SELECT COALESCE(SUM(amount),0) FROM expenses x WHERE x.project_id=p.id AND x.status!='rejected' AND x.date BETWEEN ? AND ?) expenses
+        FROM projects p JOIN clients c ON c.id=p.client_id ORDER BY c.name, p.name""", [frm, to] * 3)
+    try:
+        rs, re_ = datetime.strptime(frm, "%Y-%m-%d").date(), datetime.strptime(to, "%Y-%m-%d").date()
+        for c in by_client:
+            full = one("SELECT * FROM clients WHERE id=?", (c["id"],))
+            m = client_money(full, rs, re_)
+            c["fees"], c["retainer_fees"], c["extra_fees"] = m["fees"], m["retainer"], m["extra"]
+    except ValueError:
+        pass
+    return jsonify(range={"from": frm, "to": to}, by_client=by_client, by_employee=by_employee,
+                   by_project=by_project, matrix=matrix)
+
+
+def csv_response(filename, header, data):
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(header)
+    w.writerows(data)
+    return Response("﻿" + buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
+@app.get("/api/export/<kind>.csv")
+@login_required
+def export(kind):
+    if kind == "timelogs":
+        where, args = timelog_filters()
+        data = rows(f"{TIMELOG_SELECT} WHERE {where} ORDER BY l.started_at, l.id", args)
+        cols = ["day", "employee_name", "client_name", "project_name", "task_title", "minutes", "note", "source"]
+        head = ["Date", "Employee", "Client", "Project", "Task", "Minutes", "Note", "Source"]
+        if is_manager():
+            cols.append("cost")
+            head.append("Cost")
+        return csv_response("timesheet.csv", head + ["Hours"],
+                            [[r[c] for c in cols] + [round(r["minutes"] / 60, 2)] for r in data])
+    if kind == "expenses":
+        where, args = expense_filters()
+        data = rows(f"{EXPENSE_SELECT}{where} ORDER BY x.date", args)
+        cols = ["date", "title", "category", "amount", "client_name", "project_name", "task_title", "employee_name",
+                "billable", "status", "notes"]
+        return csv_response("expenses.csv", [c.replace("_name", "").replace("_", " ").title() for c in cols],
+                            [[r[c] for c in cols] for r in data])
+    if kind == "tasks":
+        data = list_tasks().get_json()
+        cols = ["id", "title", "client_name", "project_name", "assignee_name", "priority", "status", "due_date",
+                "estimated_hours", "minutes", "created_at", "completed_at"]
+        return csv_response("tasks.csv", [c.replace("_name", "").replace("_", " ").title() for c in cols],
+                            [[r[c] for c in cols] for r in data])
+    return bad("Unknown export", 404)
+
+
+@app.post("/api/admin/reset")
+@login_required
+def reset_all():
+    """Wipe all business data (keeps team members). Admin only."""
+    if me()["role"] != "admin":
+        return bad("Only an admin can reset data", 403)
+    if body().get("confirm") != "RESET":
+        return bad("Type RESET to confirm")
+    db = get_db()
+    files = ["receipts/" + r["receipt_file"] for r in rows("SELECT receipt_file FROM expenses WHERE receipt_file IS NOT NULL")]
+    files += ["receipts/" + r["file"] for r in rows("SELECT file FROM scans")]
+    files += ["chat/" + r["file"] for r in rows("SELECT file FROM messages WHERE file IS NOT NULL")]
+    for tbl in ("suggestions", "client_fees", "compliance", "attendance", "leaves", "messages", "notifications", "comments", "time_logs", "expenses", "tasks", "projects", "clients", "activity", "scans"):
+        db.execute(f"DELETE FROM {tbl}")
+    db.commit()
+    for i in range(0, len(files), 500):
+        delete_quietly(files[i:i + 500])
+    log("system", "cleared all clients, tasks, time and expenses")
+    db.commit()
+    touch()
+    return jsonify(ok=True)
+
+
+# ── Chat ────────────────────────────────────────────────────────────────────
+
+def office_conv_id():
+    return scalar("SELECT id FROM conversations WHERE kind='office'")
+
+
+def ensure_office_member():
+    """Every active person is automatically in the office-wide 'Everyone' chat."""
+    get_db().execute("""INSERT OR IGNORE INTO conversation_members(conversation_id, employee_id, last_read_id)
+        VALUES (?, ?, COALESCE((SELECT MAX(id) FROM messages WHERE conversation_id=?), 0))""",
+                     (office_conv_id(), g.uid, office_conv_id()))
+    get_db().commit()
+
+
+def chat_member(cid):
+    ensure_office_member()
+    return one("SELECT * FROM conversation_members WHERE conversation_id=? AND employee_id=?", (cid, g.uid))
+
+
+def message_rows(where, args):
+    return rows(f"""SELECT m.id, m.conversation_id, m.sender_id, m.created_at, m.deleted,
+        CASE WHEN m.deleted=1 THEN NULL ELSE m.body END body,
+        CASE WHEN m.deleted=1 THEN NULL ELSE m.file END file,
+        CASE WHEN m.deleted=1 THEN NULL ELSE m.file_name END file_name,
+        CASE WHEN m.deleted=1 THEN NULL ELSE m.file_type END file_type,
+        e.name sender_name, e.color sender_color
+        FROM messages m LEFT JOIN employees e ON e.id=m.sender_id WHERE {where} ORDER BY m.id""", args)
+
+
+@app.get("/api/chat/conversations")
+@login_required
+def chat_conversations():
+    ensure_office_member()
+    convs = rows("""
+        SELECT c.id, c.kind, c.name, cm.last_read_id,
+          (SELECT COUNT(*) FROM messages m WHERE m.conversation_id=c.id AND m.id>cm.last_read_id
+              AND COALESCE(m.sender_id,0)!=? AND m.deleted=0) unread,
+          (SELECT MAX(id) FROM messages m WHERE m.conversation_id=c.id) last_id
+        FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id AND cm.employee_id=?""", (g.uid, g.uid))
+    running = {r["employee_id"]: r for r in running_timers()}
+    out = []
+    for c in convs:
+        last = message_rows("m.id=?", (c["last_id"],))[0] if c["last_id"] else None
+        item = {"id": c["id"], "kind": c["kind"], "unread": c["unread"], "last": last}
+        if c["kind"] == "office":
+            item.update(title=c["name"] or "Everyone", subtitle="Whole office",
+                        members=scalar("SELECT COUNT(*) FROM employees WHERE active=1"))
+        else:
+            other = one("""SELECT e.id, e.name, e.color, e.designation, e.active FROM conversation_members cm
+                JOIN employees e ON e.id=cm.employee_id WHERE cm.conversation_id=? AND cm.employee_id!=?""", (c["id"], g.uid))
+            if not other:
+                continue
+            item.update(title=other["name"], color=other["color"], other_id=other["id"],
+                        subtitle=other["designation"] or "", active=other["active"],
+                        working_on=(running.get(other["id"]) or {}).get("task_title"))
+        out.append(item)
+    out.sort(key=lambda x: (x["kind"] != "office" and not x["last"], -(x["last"]["id"] if x["last"] else 0)))
+    people = rows("SELECT id, name, color, designation FROM employees WHERE active=1 AND id!=? ORDER BY name", (g.uid,))
+    return jsonify(conversations=out, people=people)
+
+
+@app.post("/api/chat/direct")
+@login_required
+def chat_direct():
+    other = int_or_none(body().get("employee_id"))
+    if not other or other == g.uid or not scalar("SELECT 1 FROM employees WHERE id=? AND active=1", (other,)):
+        return bad("Pick someone to chat with")
+    key = f"{min(other, g.uid)}-{max(other, g.uid)}"
+    cid = scalar("SELECT id FROM conversations WHERE direct_key=?", (key,))
+    if not cid:
+        cid = execute("INSERT INTO conversations(kind, direct_key) VALUES ('direct', ?)", (key,))
+        for eid in (g.uid, other):
+            get_db().execute("INSERT OR IGNORE INTO conversation_members(conversation_id, employee_id) VALUES (?,?)", (cid, eid))
+        get_db().commit()
+    return jsonify(id=cid)
+
+
+@app.get("/api/chat/<int:cid>/messages")
+@login_required
+def chat_messages(cid):
+    if not chat_member(cid):
+        return bad("Chat not found", 404)
+    after = int_or_none(request.args.get("after")) or 0
+    before = int_or_none(request.args.get("before"))
+    if before:
+        msgs = message_rows("m.conversation_id=? AND m.id<? AND m.id IN (SELECT id FROM messages WHERE conversation_id=? AND id<? ORDER BY id DESC LIMIT 100)",
+                            (cid, before, cid, before))
+    elif after:
+        msgs = message_rows("m.conversation_id=? AND m.id>?", (cid, after))
+    else:
+        msgs = message_rows("m.conversation_id=? AND m.id IN (SELECT id FROM messages WHERE conversation_id=? ORDER BY id DESC LIMIT 150)", (cid, cid))
+    # read receipts: highest message id that every other member has read
+    others_read = scalar("""SELECT MIN(cm.last_read_id) FROM conversation_members cm JOIN employees e ON e.id=cm.employee_id
+        WHERE cm.conversation_id=? AND cm.employee_id!=? AND e.active=1""", (cid, g.uid)) or 0
+    deleted_ids = [r["id"] for r in rows("SELECT id FROM messages WHERE conversation_id=? AND deleted=1 AND id<=?", (cid, after))] if after else []
+    return jsonify(messages=msgs, others_read=others_read, deleted_ids=deleted_ids)
+
+
+@app.post("/api/chat/<int:cid>/messages")
+@login_required
+def chat_send(cid):
+    if not chat_member(cid):
+        return bad("Chat not found", 404)
+    d = body()
+    text = (d.get("body") or "").strip()[:5000]
+    f = request.files.get("file")
+    fname = fshown = ftype = None
+    if f and f.filename:
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        if ext not in CHAT_EXT:
+            return bad("That file type can't be sent")
+        fname = f"{uuid.uuid4().hex}.{ext}"
+        pg.put_file("chat/" + fname, f.read(), f.mimetype)
+        fshown = secure_filename(f.filename) or fname
+        ftype = "image" if ext in {"png", "jpg", "jpeg", "gif", "webp", "heic"} else "file"
+    if not text and not fname:
+        return bad("Type a message")
+    mid = execute("INSERT INTO messages(conversation_id,sender_id,body,file,file_name,file_type) VALUES (?,?,?,?,?,?)",
+                  (cid, g.uid, text or None, fname, fshown, ftype))
+    get_db().execute("UPDATE conversation_members SET last_read_id=? WHERE conversation_id=? AND employee_id=?", (mid, cid, g.uid))
+    get_db().commit()
+    kind = scalar("SELECT kind FROM conversations WHERE id=?", (cid,))
+    if kind == "direct":  # group messages stay in-app to avoid buzzing everyone's phone
+        others = [r["employee_id"] for r in rows("SELECT employee_id FROM conversation_members WHERE conversation_id=? AND employee_id!=?", (cid, g.uid))]
+        send_push(others, f"💬 {me()['name']}", text or ("📷 Photo" if ftype == "image" else f"📎 {fshown}"), f"/#/chat/{cid}")
+    return jsonify(message=message_rows("m.id=?", (mid,))[0]), 201
+
+
+@app.post("/api/chat/<int:cid>/read")
+@login_required
+def chat_read(cid):
+    if not chat_member(cid):
+        return bad("Chat not found", 404)
+    last = int_or_none(body().get("last_id")) or scalar("SELECT MAX(id) FROM messages WHERE conversation_id=?", (cid,)) or 0
+    get_db().execute("UPDATE conversation_members SET last_read_id=GREATEST(last_read_id, ?) WHERE conversation_id=? AND employee_id=?",
+                     (last, cid, g.uid))
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/chat/messages/<int:mid>")
+@login_required
+def chat_delete(mid):
+    m = one("SELECT * FROM messages WHERE id=?", (mid,))
+    if not m or m["sender_id"] != g.uid:
+        return bad("You can only delete your own messages", 403)
+    execute("UPDATE messages SET deleted=1 WHERE id=?", (mid,))
+    if m["file"]:
+        delete_quietly(["chat/" + m["file"]])
+    return jsonify(ok=True)
+
+
+@app.get("/chat-files/<path:name>")
+@login_required
+def chat_file(name):
+    m = one("SELECT conversation_id, file_name FROM messages WHERE file=? AND deleted=0", (name,))
+    if not m or not chat_member(m["conversation_id"]):
+        return bad("Not found", 404)
+    return stored_file("chat/" + name)  # opens inline, like the office version
+
+
+# ── Attendance & holidays ───────────────────────────────────────────────────
+
+FIXED_HOLIDAYS = [("01-26", "Republic Day"), ("08-15", "Independence Day"), ("10-02", "Gandhi Jayanti"), ("12-25", "Christmas")]
+
+
+def today_local():
+    return date.today().isoformat()
+
+
+def local_hm(iso):
+    return parse_utc(iso).astimezone().strftime("%H:%M")
+
+
+def utc_from_local(day, hm):
+    dt = datetime.strptime(f"{day} {hm}", "%Y-%m-%d %H:%M")
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def session_minutes(sess, now=None):
+    total = 0
+    for r in sess:
+        if r["missed_out"]:
+            continue
+        end = parse_utc(r["out_at"]) if r["out_at"] else (now or datetime.now(timezone.utc))
+        total += max(0, int((end - parse_utc(r["in_at"])).total_seconds() // 60))
+    return total
+
+
+def close_stale_sessions(eid):
+    """A session left open from an earlier day = forgot to punch out. Close it with 0 hours and flag it."""
+    get_db().execute("UPDATE attendance SET out_at=in_at, missed_out=1 WHERE employee_id=? AND out_at IS NULL AND day<?",
+                     (eid, today_local()))
+
+
+def holiday_map(start, end):
+    return {r["day"]: r["name"] for r in rows("SELECT day, name FROM holidays WHERE day BETWEEN ? AND ?", (start, end))}
+
+
+def day_status(day, sess, leave, holiday, joined, now_day):
+    """present | late | half | leave | holiday | weekend | absent | not_in | upcoming | none"""
+    wd = datetime.strptime(day, "%Y-%m-%d").weekday()
+    start = scalar("SELECT value FROM settings WHERE key='office_start'") or "10:00"
+    if sess:
+        first_in = min(local_hm(r["in_at"]) for r in sess)
+        if leave and leave["kind"] == "half":
+            return "half"
+        return "late" if first_in > start and wd < 5 and not holiday else "present"
+    if day < joined:
+        return "none"
+    if holiday:
+        return "holiday"
+    if wd >= 5:
+        return "weekend"
+    if leave:
+        return "half" if leave["kind"] == "half" else "leave"
+    if day > now_day:
+        return "upcoming"
+    return "not_in" if day == now_day else "absent"
+
+
+def attendance_days(eid, start, end):
+    emp = one("SELECT created_at FROM employees WHERE id=?", (eid,))
+    joined = parse_utc(emp["created_at"]).astimezone().date().isoformat() if emp and emp["created_at"] else "2000-01-01"
+    sess_by_day = {}
+    for r in rows("SELECT * FROM attendance WHERE employee_id=? AND day BETWEEN ? AND ? ORDER BY in_at", (eid, start, end)):
+        sess_by_day.setdefault(r["day"], []).append(r)
+    leaves = {r["day"]: r for r in rows("SELECT * FROM leaves WHERE employee_id=? AND day BETWEEN ? AND ?", (eid, start, end))}
+    hol = holiday_map(start, end)
+    now_day = today_local()
+    out = []
+    d = datetime.strptime(start, "%Y-%m-%d").date()
+    last = datetime.strptime(end, "%Y-%m-%d").date()
+    while d <= last:
+        k = d.isoformat()
+        sess = sess_by_day.get(k, [])
+        st = day_status(k, sess, leaves.get(k), hol.get(k), joined, now_day)
+        out.append({"day": k, "status": st, "holiday": hol.get(k), "leave": leaves.get(k),
+                    "first_in": min((local_hm(r["in_at"]) for r in sess), default=None),
+                    "last_out": max((local_hm(r["out_at"]) for r in sess if r["out_at"] and not r["missed_out"]), default=None),
+                    "open": any(r["out_at"] is None for r in sess), "missed_out": any(r["missed_out"] for r in sess),
+                    "minutes": session_minutes(sess), "sessions": len(sess)})
+        d += timedelta(days=1)
+    return out
+
+
+def month_bounds(month):
+    try:
+        first = datetime.strptime((month or today_local()[:7]) + "-01", "%Y-%m-%d").date()
+    except ValueError:
+        first = date.today().replace(day=1)
+    nxt = (first.replace(day=28) + timedelta(days=4)).replace(day=1)
+    return first.isoformat(), (nxt - timedelta(days=1)).isoformat()
+
+
+def summarize(days):
+    count = lambda *s: sum(1 for d in days if d["status"] in s)
+    ins = [d["first_in"] for d in days if d["first_in"]]
+    avg_in = None
+    if ins:
+        mins = sum(int(h) * 60 + int(m) for h, m in (x.split(":") for x in ins)) // len(ins)
+        avg_in = f"{mins // 60:02d}:{mins % 60:02d}"
+    return {"present": count("present", "late") + count("half") * 0.5, "late": count("late"), "absent": count("absent"),
+            "leave": count("leave") + count("half") * 0.5, "holidays": count("holiday"),
+            "working_days": count("present", "late", "half", "leave", "absent", "not_in", "upcoming"),
+            "minutes": sum(d["minutes"] for d in days), "avg_in": avg_in,
+            "missed_out": sum(1 for d in days if d["missed_out"])}
+
+
+def my_today(eid):
+    close_stale_sessions(eid)
+    get_db().commit()
+    t = today_local()
+    sess = rows("SELECT * FROM attendance WHERE employee_id=? AND day=? ORDER BY in_at", (eid, t))
+    hol = scalar("SELECT name FROM holidays WHERE day=?", (t,))
+    leave = one("SELECT * FROM leaves WHERE employee_id=? AND day=?", (eid, t))
+    open_s = next((r for r in sess if r["out_at"] is None), None)
+    wd = date.today().weekday()
+    return {"day": t, "holiday": hol, "weekend": wd >= 5, "closed": bool(hol) or wd >= 5, "leave": leave,
+            "in_since": open_s["in_at"] if open_s else None, "minutes": session_minutes(sess),
+            "first_in": sess[0]["in_at"] if sess else None, "last_out": next((r["out_at"] for r in reversed(sess) if r["out_at"]), None),
+            "sessions": [{"in": r["in_at"], "out": r["out_at"], "missed_out": r["missed_out"]} for r in sess]}
+
+
+@app.get("/api/attendance/me")
+@login_required
+def attendance_me():
+    return jsonify(my_today(g.uid))
+
+
+@app.post("/api/attendance/punch")
+@login_required
+def punch():
+    action = body().get("action")
+    close_stale_sessions(g.uid)
+    open_s = one("SELECT id FROM attendance WHERE employee_id=? AND day=? AND out_at IS NULL", (g.uid, today_local()))
+    if action == "in":
+        if open_s:
+            return bad("You're already punched in")
+        execute("INSERT INTO attendance(employee_id, day, in_at) VALUES (?,?,?)", (g.uid, today_local(), utcnow()))
+        log("attendance", "punched in")
+    elif action == "out":
+        if not open_s:
+            return bad("You're not punched in")
+        execute("UPDATE attendance SET out_at=? WHERE id=?", (utcnow(), open_s["id"]))
+        log("attendance", "punched out")
+    else:
+        return bad("Unknown action")
+    get_db().commit()
+    return jsonify(my_today(g.uid))
+
+
+@app.get("/api/attendance/today")
+@manager_required
+def attendance_today():
+    t = today_local()
+    out = []
+    for e in rows("SELECT id, name, color, designation FROM employees WHERE active=1 ORDER BY name"):
+        close_stale_sessions(e["id"])
+        d = attendance_days(e["id"], t, t)[0]
+        e.update(d)
+        e["in_since"] = scalar("SELECT in_at FROM attendance WHERE employee_id=? AND day=? AND out_at IS NULL", (e["id"], t))
+        out.append(e)
+    get_db().commit()
+    hol = scalar("SELECT name FROM holidays WHERE day=?", (t,))
+    return jsonify(day=t, holiday=hol, weekend=date.today().weekday() >= 5, people=out,
+                   office_start=scalar("SELECT value FROM settings WHERE key='office_start'"))
+
+
+@app.get("/api/attendance/month")
+@login_required
+def attendance_month():
+    start, end = month_bounds(request.args.get("month"))
+    eid = int_or_none(request.args.get("employee_id"))
+    if not is_manager() or eid:
+        eid = eid if is_manager() and eid else g.uid
+        days = attendance_days(eid, start, end)
+        return jsonify(month=start[:7], employee_id=eid, days=days, summary=summarize(days))
+    register = []
+    for e in rows("SELECT id, name, color, designation FROM employees WHERE active=1 ORDER BY name"):
+        days = attendance_days(e["id"], start, end)
+        register.append({**e, "days": days, "summary": summarize(days)})
+    return jsonify(month=start[:7], register=register, holidays=holiday_map(start, end))
+
+
+@app.put("/api/attendance/day")
+@manager_required
+def attendance_edit_day():
+    """Manager fixes one person's day: set in/out time, mark leave, or clear."""
+    d = body()
+    eid, day = int_or_none(d.get("employee_id")), d.get("day") or ""
+    if not eid or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        return bad("Pick a person and a day")
+    name = emp_name(eid)
+    db = get_db()
+    in_t, out_t = (d.get("in_time") or "").strip(), (d.get("out_time") or "").strip()
+    if in_t or out_t:
+        if not re.fullmatch(r"\d{2}:\d{2}", in_t) or (out_t and not re.fullmatch(r"\d{2}:\d{2}", out_t)):
+            return bad("Times must look like 09:30")
+        if out_t and out_t <= in_t:
+            return bad("Out time must be after in time")
+        db.execute("DELETE FROM attendance WHERE employee_id=? AND day=?", (eid, day))
+        db.execute("INSERT INTO attendance(employee_id, day, in_at, out_at, source, edited_by) VALUES (?,?,?,?, 'manager', ?)",
+                   (eid, day, utc_from_local(day, in_t), utc_from_local(day, out_t) if out_t else None, g.uid))
+    elif d.get("clear_times"):
+        db.execute("DELETE FROM attendance WHERE employee_id=? AND day=?", (eid, day))
+    leave = d.get("leave")
+    if leave in ("full", "half"):
+        db.execute("INSERT OR REPLACE INTO leaves(employee_id, day, kind, note, created_by) VALUES (?,?,?,?,?)",
+                   (eid, day, leave, d.get("note"), g.uid))
+    elif leave == "none":
+        db.execute("DELETE FROM leaves WHERE employee_id=? AND day=?", (eid, day))
+    log("attendance", f"updated attendance of {name} for {day}")
+    db.commit()
+    touch()
+    return jsonify(ok=True, day=attendance_days(eid, day, day)[0])
+
+
+@app.post("/api/attendance/leave")
+@login_required
+def mark_own_leave():
+    d = body()
+    day, kind = d.get("day") or "", d.get("kind") or "full"
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) or kind not in ("full", "half", "none"):
+        return bad("Pick a date")
+    if kind == "none":
+        if day < today_local():
+            return bad("Ask your manager to change past days")
+        execute("DELETE FROM leaves WHERE employee_id=? AND day=?", (g.uid, day))
+        notify_managers("leave", f"cancelled leave on {day}")
+    else:
+        execute("INSERT OR REPLACE INTO leaves(employee_id, day, kind, note, created_by) VALUES (?,?,?,?,?)",
+                (g.uid, day, kind, d.get("note"), g.uid))
+        label = "half-day leave" if kind == "half" else "leave"
+        notify_managers("leave", f"marked {label} on {datetime.strptime(day, '%Y-%m-%d').strftime('%a %d %b')}" + (f" — {d['note']}" if d.get("note") else ""))
+        log("attendance", f"marked {label} on {day}")
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.get("/api/holidays")
+@login_required
+def list_holidays():
+    year = request.args.get("year") or today_local()[:4]
+    return jsonify(rows("SELECT * FROM holidays WHERE day LIKE ? ORDER BY day", (f"{year}-%",)))
+
+
+@app.post("/api/holidays")
+@manager_required
+def add_holiday():
+    d = body()
+    day, name = d.get("day") or "", (d.get("name") or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day) or not name:
+        return bad("Enter a date and a name")
+    execute("INSERT INTO holidays(day, name) VALUES (?,?) ON CONFLICT(day) DO UPDATE SET name=excluded.name", (day, name))
+    log("holiday", f"added holiday {name} on {day}")
+    get_db().commit()
+    return jsonify(ok=True), 201
+
+
+@app.post("/api/holidays/preset")
+@manager_required
+def add_fixed_holidays():
+    year = int(num(body().get("year"), date.today().year))
+    added = 0
+    for md, name in FIXED_HOLIDAYS:
+        cur = get_db().execute("INSERT OR IGNORE INTO holidays(day, name) VALUES (?,?)", (f"{year}-{md}", name))
+        added += cur.rowcount
+    get_db().commit()
+    touch()
+    return jsonify(ok=True, added=added)
+
+
+@app.delete("/api/holidays/<int:hid>")
+@manager_required
+def delete_holiday(hid):
+    execute("DELETE FROM holidays WHERE id=?", (hid,))
+    return jsonify(ok=True)
+
+
+@app.get("/api/export/attendance.csv")
+@manager_required
+def export_attendance():
+    start, end = month_bounds(request.args.get("month"))
+    label = {"present": "P", "late": "P (late)", "half": "Half day", "leave": "Leave", "holiday": "Holiday",
+             "weekend": "Weekend", "absent": "Absent", "not_in": "Not in", "upcoming": "", "none": ""}
+    out = []
+    for e in rows("SELECT id, name FROM employees WHERE active=1 ORDER BY name"):
+        for d in attendance_days(e["id"], start, end):
+            out.append([e["name"], d["day"], datetime.strptime(d["day"], "%Y-%m-%d").strftime("%a"), label[d["status"]],
+                        d["first_in"] or "", d["last_out"] or "", round(d["minutes"] / 60, 2) if d["minutes"] else "",
+                        d["holiday"] or "", (d["leave"] or {}).get("note") or "", "yes" if d["missed_out"] else ""])
+    return csv_response(f"attendance-{start[:7]}.csv",
+                        ["Employee", "Date", "Day", "Status", "In", "Out", "Hours", "Holiday", "Leave note", "Missed punch-out"], out)
+
+
+# ── Compliance calendar ─────────────────────────────────────────────────────
+
+COMPLIANCE_CATEGORIES = ["GST", "TDS", "Income Tax", "ROC", "PF / ESI", "Other"]
+RECUR_MONTHS = {"monthly": 1, "quarterly": 3, "yearly": 12}
+
+
+def add_months(d, n):
+    y, m = divmod(d.month - 1 + n, 12)
+    y += d.year
+    m += 1
+    last = (date(y + (m // 12), m % 12 + 1, 1) - timedelta(days=1)).day
+    return date(y, m, min(d.day, last))
+
+
+def fy_label(d):
+    start = d.year if d.month >= 4 else d.year - 1
+    return f"FY {start}-{str(start + 1)[2:]}"
+
+
+def standard_compliance(start_month):
+    """Standard Indian statutory due dates for 12 months starting at start_month (date, 1st of month).
+    Returns (title, period, category, due_date, series_key)."""
+    out = []
+    for i in range(12):
+        m = add_months(start_month, i)                  # month in which the due date falls
+        prev = add_months(m, -1)                        # period being reported
+        per = prev.strftime("%b %Y")
+        out.append(("GSTR-1", per, "GST", m.replace(day=11), "std-gstr1"))
+        out.append(("GSTR-3B", per, "GST", m.replace(day=20), "std-gstr3b"))
+        out.append(("TDS / TCS deposit", per, "TDS", m.replace(day=30 if m.month == 4 else 7), "std-tds-pay"))
+        out.append(("PF & ESI payment", per, "PF / ESI", m.replace(day=15), "std-pf"))
+        md = (m.month, m.year)
+        if m.month in (7, 10, 1, 5):
+            q = {7: "Q1 (Apr–Jun)", 10: "Q2 (Jul–Sep)", 1: "Q3 (Oct–Dec)", 5: "Q4 (Jan–Mar)"}[m.month]
+            out.append(("TDS return (24Q / 26Q)", f"{q} {fy_label(add_months(m, -2))}", "TDS", m.replace(day=31), "std-tds-ret"))
+        if m.month in (6, 9, 12, 3):
+            inst = {6: "1st instalment", 9: "2nd instalment", 12: "3rd instalment", 3: "4th instalment"}[m.month]
+            out.append(("Advance tax", f"{inst} · {fy_label(m)}", "Income Tax", m.replace(day=15), "std-advtax"))
+        if m.month == 7:
+            out.append(("ITR filing (non-audit cases)", f"AY {m.year}-{str(m.year + 1)[2:]}", "Income Tax", m.replace(day=31), "std-itr"))
+        if m.month == 9:
+            out.append(("Tax audit report (Form 3CA/3CB-3CD)", f"AY {m.year}-{str(m.year + 1)[2:]}", "Income Tax", m.replace(day=30), "std-taxaudit"))
+        if m.month == 10:
+            out.append(("ITR filing (audit cases)", f"AY {m.year}-{str(m.year + 1)[2:]}", "Income Tax", m.replace(day=31), "std-itr-audit"))
+        if m.month == 12:
+            out.append(("GSTR-9 / 9C annual return", fy_label(add_months(m, -12)), "GST", m.replace(day=31), "std-gstr9"))
+    return out
+
+
+def extend_series():
+    """Keep repeating items populated ~12 months ahead."""
+    horizon = (date.today() + timedelta(days=300)).isoformat()
+    for r in rows("""SELECT series, MAX(due_date) last FROM compliance WHERE recur!='none' AND series IS NOT NULL
+                     AND series NOT LIKE 'std-%' GROUP BY series HAVING MAX(due_date) < ?""", (horizon,)):
+        tpl = one("SELECT * FROM compliance WHERE series=? ORDER BY due_date DESC LIMIT 1", (r["series"],))
+        step = RECUR_MONTHS.get(tpl["recur"], 0)
+        if not step:
+            continue
+        d = datetime.strptime(tpl["due_date"], "%Y-%m-%d").date()
+        while d.isoformat() < horizon:
+            d = add_months(d, step)
+            get_db().execute("""INSERT INTO compliance(series,title,category,due_date,client_id,assignee_id,recur,notes,created_by)
+                VALUES (?,?,?,?,?,?,?,?,?)""", (tpl["series"], tpl["title"], tpl["category"], d.isoformat(), tpl["client_id"],
+                                                tpl["assignee_id"], tpl["recur"], tpl["notes"], tpl["created_by"]))
+    get_db().commit()
+
+
+COMPLIANCE_SELECT = """SELECT c.*, cl.name client_name, cl.color client_color, a.name assignee_name, a.color assignee_color,
+    f.name filed_by_name FROM compliance c LEFT JOIN clients cl ON cl.id=c.client_id
+    LEFT JOIN employees a ON a.id=c.assignee_id LEFT JOIN employees f ON f.id=c.filed_by"""
+
+
+def can_file(c):
+    return is_manager() or not c["assignee_id"] or c["assignee_id"] == g.uid
+
+
+@app.get("/api/compliance")
+@login_required
+def list_compliance():
+    extend_series()
+    a = request.args
+    where, args = [], []
+    if a.get("from"):
+        where.append("c.due_date >= ?"); args.append(a["from"])
+    if a.get("to"):
+        where.append("c.due_date <= ?"); args.append(a["to"])
+    if a.get("category") in COMPLIANCE_CATEGORIES:
+        where.append("c.category=?"); args.append(a["category"])
+    if a.get("client_id"):
+        if a["client_id"] == "none":
+            where.append("c.client_id IS NULL")
+        else:
+            where.append("c.client_id=?"); args.append(int_or_none(a["client_id"]))
+    if a.get("mine"):
+        where.append("c.assignee_id=?"); args.append(g.uid)
+    if a.get("pending"):
+        where.append("c.status='pending'")
+    items = rows(COMPLIANCE_SELECT + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY c.due_date, c.category, c.title", args)
+    t = today_local()
+    stats = one("""SELECT
+        SUM(CASE WHEN status='pending' AND due_date < ? THEN 1 ELSE 0 END) overdue,
+        SUM(CASE WHEN status='pending' AND due_date BETWEEN ? AND ? THEN 1 ELSE 0 END) week,
+        SUM(CASE WHEN status='pending' AND due_date BETWEEN ? AND ? THEN 1 ELSE 0 END) month,
+        SUM(CASE WHEN status='filed' AND substr(filed_on,1,7)=? THEN 1 ELSE 0 END) filed_month
+        FROM compliance""", (t, t, (date.today() + timedelta(days=7)).isoformat(), t,
+                             (date.today() + timedelta(days=30)).isoformat(), t[:7]))
+    return jsonify(items=items, stats={k: v or 0 for k, v in stats.items()}, categories=COMPLIANCE_CATEGORIES,
+                   can_manage=is_manager())
+
+
+def compliance_values(d):
+    v = {"title": (d.get("title") or "").strip(), "period": (d.get("period") or "").strip() or None,
+         "category": d.get("category") if d.get("category") in COMPLIANCE_CATEGORIES else "Other",
+         "due_date": d.get("due_date") or "", "client_id": int_or_none(d.get("client_id")),
+         "assignee_id": int_or_none(d.get("assignee_id")), "notes": d.get("notes") or None,
+         "recur": d.get("recur") if d.get("recur") in ("none", "monthly", "quarterly", "yearly") else "none"}
+    if v["client_id"] and not scalar("SELECT 1 FROM clients WHERE id=?", (v["client_id"],)):
+        v["client_id"] = None
+    if v["assignee_id"] and not scalar("SELECT 1 FROM employees WHERE id=?", (v["assignee_id"],)):
+        v["assignee_id"] = None
+    return v
+
+
+@app.post("/api/compliance")
+@manager_required
+def create_compliance():
+    v = compliance_values(body())
+    if not v["title"] or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v["due_date"]):
+        return bad("Enter what is due and the due date")
+    series = uuid.uuid4().hex[:12] if v["recur"] != "none" else None
+    d = datetime.strptime(v["due_date"], "%Y-%m-%d").date()
+    count = {"none": 1, "monthly": 12, "quarterly": 4, "yearly": 2}[v["recur"]]
+    for i in range(count):
+        due = add_months(d, i * RECUR_MONTHS.get(v["recur"], 0)) if i else d
+        get_db().execute("""INSERT INTO compliance(series,title,period,category,due_date,client_id,assignee_id,recur,notes,created_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?)""", (series, v["title"], v["period"] if i == 0 else None, v["category"], due.isoformat(),
+                                              v["client_id"], v["assignee_id"], v["recur"], v["notes"], g.uid))
+    log("compliance", f"added due date {v['title']} ({v['due_date']})" + ("" if v["recur"] == "none" else f", repeats {v['recur']}"),
+        client_id=v["client_id"])
+    get_db().commit()
+    touch()
+    return jsonify(ok=True, created=count), 201
+
+
+@app.post("/api/compliance/preset")
+@manager_required
+def compliance_preset():
+    start = date.today().replace(day=1)
+    added = 0
+    for title, period, cat, due, series in standard_compliance(start):
+        if due < date.today():
+            continue
+        exists = scalar("SELECT 1 FROM compliance WHERE title=? AND due_date=? AND client_id IS NULL", (title, due.isoformat()))
+        if not exists:
+            get_db().execute("""INSERT INTO compliance(series,title,period,category,due_date,recur,notes,created_by)
+                VALUES (?,?,?,?,?,'none',?,?)""", (series, title, period, cat, due.isoformat(),
+                                                   "Standard due date — check for government extensions", g.uid))
+            added += 1
+    log("compliance", f"added {added} standard statutory due dates")
+    get_db().commit()
+    touch()
+    return jsonify(ok=True, added=added)
+
+
+@app.put("/api/compliance/<int:cid>")
+@manager_required
+def update_compliance(cid):
+    c = one("SELECT * FROM compliance WHERE id=?", (cid,))
+    if not c:
+        return bad("Not found", 404)
+    v = compliance_values({**c, **body()})
+    if not v["title"] or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", v["due_date"]):
+        return bad("Enter what is due and the due date")
+    execute("""UPDATE compliance SET title=?,period=?,category=?,due_date=?,client_id=?,assignee_id=?,notes=? WHERE id=?""",
+            (v["title"], v["period"], v["category"], v["due_date"], v["client_id"], v["assignee_id"], v["notes"], cid))
+    return jsonify(ok=True)
+
+
+@app.post("/api/compliance/<int:cid>/status")
+@login_required
+def compliance_status(cid):
+    c = one("SELECT * FROM compliance WHERE id=?", (cid,))
+    if not c:
+        return bad("Not found", 404)
+    if not can_file(c):
+        return bad("This is assigned to someone else", 403)
+    d = body()
+    label = c["title"] + (f" ({c['period']})" if c["period"] else "")
+    if d.get("status") == "filed":
+        execute("UPDATE compliance SET status='filed', filed_on=?, filed_by=?, filed_note=? WHERE id=?",
+                (d.get("filed_on") or today_local(), g.uid, d.get("note") or None, cid))
+        cname = scalar("SELECT name FROM clients WHERE id=?", (c["client_id"],)) if c["client_id"] else None
+        log("compliance", f"marked {label} as filed" + (f" for {cname}" if cname else ""), client_id=c["client_id"])
+        notify_managers("compliance", f"filed {label}" + (f" for {cname}" if cname else "") + (f" — {d['note']}" if d.get("note") else ""))
+    else:
+        execute("UPDATE compliance SET status='pending', filed_on=NULL, filed_by=NULL, filed_note=NULL WHERE id=?", (cid,))
+        log("compliance", f"reopened {label}", client_id=c["client_id"])
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/compliance/<int:cid>")
+@manager_required
+def delete_compliance(cid):
+    c = one("SELECT * FROM compliance WHERE id=?", (cid,))
+    if not c:
+        return bad("Not found", 404)
+    if request.args.get("future") and c["series"]:
+        execute("DELETE FROM compliance WHERE series=? AND due_date>=? AND status='pending'", (c["series"], c["due_date"]))
+        execute("UPDATE compliance SET recur='none' WHERE series=?", (c["series"],))  # stop it repeating
+    else:
+        execute("DELETE FROM compliance WHERE id=?", (cid,))
+    return jsonify(ok=True)
+
+
+@app.get("/api/push/key")
+@login_required
+def push_key():
+    n = scalar("SELECT COUNT(*) FROM push_subs WHERE employee_id=?", (g.uid,))
+    return jsonify(key=scalar("SELECT value FROM settings WHERE key='vapid_public'"), devices=n)
+
+
+@app.post("/api/push/subscribe")
+@login_required
+def push_subscribe():
+    d = body()
+    sub = d.get("subscription") or {}
+    keys = sub.get("keys") or {}
+    if not sub.get("endpoint", "").startswith("https://") or not keys.get("p256dh") or not keys.get("auth"):
+        return bad("This browser didn't provide a valid subscription")
+    get_db().execute("""INSERT INTO push_subs(employee_id, endpoint, p256dh, auth, device) VALUES (?,?,?,?,?)
+        ON CONFLICT(endpoint) DO UPDATE SET employee_id=excluded.employee_id, p256dh=excluded.p256dh, auth=excluded.auth""",
+                     (g.uid, sub["endpoint"], keys["p256dh"], keys["auth"], (d.get("device") or "")[:120]))
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.post("/api/push/unsubscribe")
+@login_required
+def push_unsubscribe():
+    execute("DELETE FROM push_subs WHERE employee_id=? AND endpoint=?", (g.uid, body().get("endpoint") or ""))
+    return jsonify(ok=True)
+
+
+@app.post("/api/push/test")
+@login_required
+def push_test():
+    if not scalar("SELECT 1 FROM push_subs WHERE employee_id=?", (g.uid,)):
+        return bad("Turn on notifications on this phone first")
+    send_push([g.uid], "WorkDesk ✓", "Phone notifications are working. You'll get alerts here even when the app is closed.", "/#/dashboard")
+    return jsonify(ok=True)
+
+
+@app.get("/sw.js")
+def service_worker():
+    resp = send_from_directory(STATIC_DIR, "sw.js", mimetype="application/javascript", max_age=0)
+    resp.headers["Service-Worker-Allowed"] = "/"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@app.get("/manifest.webmanifest")
+def manifest():
+    return send_from_directory(STATIC_DIR, "manifest.webmanifest", mimetype="application/manifest+json")
+
+
+@app.get("/icons/<path:name>")
+def icons(name):
+    return send_from_directory(STATIC_DIR / "icons", name, max_age=86400)
+
+
+# ── Invoice reader (on-device OCR) ──────────────────────────────────────────
+
+MONEY_RE = re.compile(r"(?<![\w/.-])(\d{1,3}(?:,\d{2,3})+(?:\.\d{1,2})?|\d+\.\d{1,2}|\d{2,7})(?![\w/%-])")
+TOTAL_WORDS = ["grand total", "total amount payable", "amount payable", "net amount payable", "net payable", "total payable",
+               "invoice total", "total amount", "amount due", "balance due", "net amount", "bill amount", "amount paid", "total", "paid", "amount"]
+CATEGORY_WORDS = [
+    ("Food", ["restaurant", "cafe", "café", "food", "swiggy", "zomato", "dine", "kitchen", "buffet", "barbeque", "pizza", "burger",
+              "coffee", "tea", "bakery", "sweets", "dhaba", "biryani", "meal", "lunch", "dinner", "breakfast", "starbucks", "mcdonald", "domino", "kfc", "haldiram"]),
+    ("Accommodation", ["hotel", "resort", "inn", "stay", "room", "lodge", "oyo", "check-in", "check-out", "guest house", "suites"]),
+    ("Travel", ["airline", "airways", "flight", "indigo", "air india", "vistara", "akasa", "spicejet", "irctc", "railway", "train", "boarding pass", "pnr", "makemytrip", "goibibo", "yatra"]),
+    ("Conveyance", ["uber", "ola", "rapido", "cab", "taxi", "auto", "trip fare", "ride", "fuel", "petrol", "diesel", "toll", "parking", "fastag", "metro"]),
+    ("Courier", ["courier", "blue dart", "bluedart", "dtdc", "delhivery", "fedex", "dhl", "speed post", "india post", "awb", "consignment", "shipment"]),
+    ("Printing & Stationery", ["print", "xerox", "photocopy", "stationery", "stationers", "paper", "toner", "cartridge", "binding", "lamination"]),
+    ("Govt. Fees", ["challan", "government", "govt", "mca", "roc fee", "stamp duty", "registration fee", "late fee", "penalty", "income tax department", "gst portal"]),
+    ("Software", ["software", "subscription", "license", "licence", "saas", "google workspace", "microsoft", "adobe", "zoho", "tally", "cloud", "domain", "hosting"]),
+    ("Professional Fees", ["professional fee", "consultancy", "legal fee", "advocate", "retainer"]),
+]
+MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+
+
+def _money(tok):
+    try:
+        return float(tok.replace(",", ""))
+    except ValueError:
+        return None
+
+
+def _find_dates(text):
+    out = []
+    pats = [
+        (r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})\b", lambda m: (int(m[3]), int(m[2]), int(m[1]))),
+        (r"\b(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})\b", lambda m: (int(m[1]), int(m[2]), int(m[3]))),
+        (r"\b(\d{1,2})[\s\-/.,]*([A-Za-z]{3,9})[\s\-/.,']*(\d{4}|\d{2})\b", lambda m: (int(m[3]) + (2000 if len(m[3]) == 2 else 0), MONTHS.get(m[2][:3].lower(), 0), int(m[1]))),
+        (r"\b([A-Za-z]{3,9})\s+(\d{1,2}),?\s+(\d{4})\b", lambda m: (int(m[3]), MONTHS.get(m[1][:3].lower(), 0), int(m[2]))),
+        (r"\b(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2})\b", lambda m: (2000 + int(m[3]), int(m[2]), int(m[1]))),
+    ]
+    for li, line in enumerate(text.splitlines()):
+        for pat, conv in pats:
+            for m in re.finditer(pat, line):
+                try:
+                    y, mo, d = conv(m)
+                    dt = date(y, mo, d)
+                except (ValueError, TypeError):
+                    continue
+                if date(2000, 1, 1) <= dt <= date.today() + timedelta(days=1):
+                    out.append((li, line.lower(), dt))
+    return out
+
+
+def extract_invoice(text):
+    """Pull vendor, date, total, category, invoice no. and GSTIN out of OCR'd invoice text."""
+    lines = [l.strip() for l in text.splitlines() if l.strip()]
+    low = [l.lower() for l in lines]
+    result = {"vendor": None, "date": None, "amount": None, "category": "Other", "invoice_no": None, "gstin": None, "confidence": {}}
+    # --- amount: best "total"-type line, preferring the strongest keyword and the last occurrence
+    best = None
+    for rank, word in enumerate(TOTAL_WORDS):
+        for i in range(len(lines) - 1, -1, -1):
+            l = low[i]
+            if word in l and not any(x in l for x in ("sub total", "subtotal", "sub-total", "total tax", "total gst", "tax total", "total qty",
+                                                        "total items", "item total", "items total", "total discount", "total savings", "you saved")):
+                nums = [(_money(t), t) for t in MONEY_RE.findall(lines[i].split(":")[-1] if ":" in lines[i] else lines[i])]
+                if not nums and i + 1 < len(lines):
+                    nums = [(_money(t), t) for t in MONEY_RE.findall(lines[i + 1])]
+                nums = [n for n in nums if n[0] and n[0] > 0]
+                if nums:
+                    best = (rank, i, nums[-1])
+                    break
+        if best:
+            break
+    if best:
+        _, idx, (val, tok) = best
+        # a ₹ sign misread as a digit glued to the amount ("₹612.45" -> "7612.45"): fix if the rest matches the bill
+        # other amounts on the bill (above and below the total line), in reading order
+        before = [v for j, l in enumerate(lines) if j != idx for v in (_money(t) for t in MONEY_RE.findall(l)) if v]
+        stripped = _money(tok.replace(",", "")[1:]) if len(tok.replace(",", "")) > 3 else None
+        def matches_run(x):
+            for a in range(len(before)):
+                s_ = 0
+                for b in range(a, len(before)):
+                    s_ += before[b]
+                    if abs(s_ - x) < 0.06:
+                        return True
+            return False
+        if stripped and not matches_run(val) and matches_run(stripped):
+            val = stripped
+        result["amount"] = round(val, 2)
+        result["confidence"]["amount"] = "high" if best[0] <= 11 else "medium"
+    else:
+        cands = [_money(t) for l in lines for t in MONEY_RE.findall(l) if "." in t or "," in t]
+        cands = [c for c in cands if c]
+        if cands:
+            result["amount"] = max(cands)
+            result["confidence"]["amount"] = "low"
+    # --- date: prefer lines that say date/dated/invoice/bill
+    dates = _find_dates("\n".join(lines))
+    if dates:
+        pref = [d for d in dates if any(k in d[1] for k in ("invoice date", "bill date", "date", "dated", "dt"))]
+        pick = (pref or dates)[0][2]
+        result["date"] = pick.isoformat()
+        result["confidence"]["date"] = "high" if pref else "medium"
+    # --- GSTIN / invoice number
+    g_ = re.search(r"\b(\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d])\b", text.upper())
+    if g_:
+        result["gstin"] = g_.group(1)
+    inv = re.search(r"(?:invoice|inv|bill|receipt|order)\s*(?:no|number|#|num)\.?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/\-]{2,})", text, re.I)
+    if inv:
+        result["invoice_no"] = inv.group(1)
+    # --- vendor: first meaningful line near the top
+    skip = ("tax invoice", "invoice", "receipt", "bill of supply", "original", "duplicate", "gstin", "cash memo", "thanks", "thank you", "welcome", "estimate")
+    for l in lines[:6]:
+        ll = l.lower()
+        letters = sum(ch.isalpha() for ch in l)
+        if letters >= 3 and not any(ll.startswith(k) or ll == k for k in skip) and not re.search(r"\d{2}[/\-.]\d{2}", l) and len(l) <= 60:
+            v = re.sub(r"\s{2,}.*$", "", l).strip(" -:|·•")
+            result["vendor"] = " ".join(w if len(w) <= 3 else w.capitalize() for w in v.split()) if v.isupper() else v
+            break
+    # --- category by keywords (vendor counts double)
+    hay = " ".join(low)
+    scores = {}
+    for cat, words in CATEGORY_WORDS:
+        sc = sum(hay.count(w) for w in words) + 2 * sum(w in (result["vendor"] or "").lower() for w in words)
+        if sc:
+            scores[cat] = sc
+    if scores:
+        result["category"] = max(scores, key=scores.get)
+        result["confidence"]["category"] = "high" if scores[result["category"]] >= 2 else "medium"
+    return result
+
+
+def pdf_text(data):
+    """Text layer of a PDF (first 4 pages). Scanned PDFs have none; the browser reads those (see scanUpload)."""
+    try:
+        from pypdf import PdfReader
+        reader = PdfReader(io.BytesIO(data))
+        return "\n".join((p.extract_text() or "") for p in reader.pages[:4])
+    except Exception:
+        return ""
+
+
+def cleanup_old_scans():
+    """Delete scanned invoices that were never saved as an expense (older than a day)."""
+    old = [r["file"] for r in rows("SELECT file FROM scans WHERE created_at < now() - interval '1 day'")]
+    if old:
+        get_db().execute(f"DELETE FROM scans WHERE file IN ({','.join('?' * len(old))})", old)
+        get_db().commit()
+        delete_quietly(["receipts/" + f for f in old])
+
+
+@app.post("/api/expenses/scan")
+@login_required
+def scan_invoices():
+    """Upload one or more invoices (PDF/photo); returns the details read from each, ready to review.
+    The browser sends the text it read from photos/scans as text_<n>; PDFs with a text layer are read here."""
+    files = request.files.getlist("files")
+    if not files:
+        return bad("Drop at least one invoice")
+    if len(files) > 20:
+        return bad("Scan up to 20 invoices at a time")
+    cleanup_old_scans()
+    out = []
+    for n, f in enumerate(files):
+        ext = f.filename.rsplit(".", 1)[-1].lower() if "." in f.filename else ""
+        item = {"file_name": secure_filename(f.filename) or "invoice"}
+        if ext not in RECEIPT_EXT:
+            item["error"] = "Not a PDF or image"
+            out.append(item)
+            continue
+        name = f"scan_{uuid.uuid4().hex}.{ext}"
+        data = f.read()
+        pg.put_file("receipts/" + name, data, f.mimetype)
+        get_db().execute("INSERT INTO scans(file, owner_id) VALUES (?,?)", (name, g.uid))
+        get_db().commit()
+        item["file"] = name
+        text = request.form.get(f"text_{n}") or ""
+        if ext == "pdf" and len(text.strip()) < 40:
+            text = pdf_text(data) or text
+        if not text.strip():
+            item["error"] = "Couldn't read any text — fill in the details by hand"
+            item.update({"vendor": None, "date": None, "amount": None, "category": "Other"})
+        else:
+            item.update(extract_invoice(text))
+            item["text"] = text[:1500]
+        out.append(item)
+    return jsonify(items=out)
+
+
+@app.get("/receipts-scan/<path:name>")
+@login_required
+def scanned_receipt(name):
+    if scalar("SELECT owner_id FROM scans WHERE file=?", (name,)) != g.uid and not is_manager():
+        return bad("Not found", 404)
+    return stored_file("receipts/" + name)
+
+
+# ── Notes (sticky notes + notepad) ──────────────────────────────────────────
+
+NOTE_COLORS = ("yellow", "pink", "green", "blue", "purple", "orange")
+
+
+@app.get("/api/notes")
+@login_required
+def list_notes():
+    mine = rows("SELECT * FROM notes WHERE owner_id=? ORDER BY pinned DESC, updated_at DESC", (g.uid,))
+    shared = rows("""SELECT n.*, e.name owner_name, e.color owner_color FROM notes n JOIN employees e ON e.id=n.owner_id
+        WHERE n.shared=1 AND n.owner_id!=? ORDER BY n.pinned DESC, n.updated_at DESC""", (g.uid,))
+    return jsonify(mine=mine, shared=shared, colors=NOTE_COLORS)
+
+
+def _note_save(nid, d):
+    """Private edits don't ping everyone's screen; shared ones do (so the team sees them live)."""
+    db = get_db()
+    n = one("SELECT * FROM notes WHERE id=? AND owner_id=?", (nid, g.uid))
+    if not n:
+        return None
+    v = {"title": (d.get("title", n["title"]) or "")[:200], "body": (d.get("body", n["body"]) or "")[:100000],
+         "color": d.get("color") if d.get("color") in NOTE_COLORS else n["color"],
+         "pinned": (1 if d["pinned"] in (1, True, "1", "true") else 0) if "pinned" in d else n["pinned"],
+         "shared": (1 if d["shared"] in (1, True, "1", "true") else 0) if "shared" in d else n["shared"]}
+    db.execute("UPDATE notes SET title=?, body=?, color=?, pinned=?, shared=?, updated_at=? WHERE id=?",
+               (v["title"], v["body"], v["color"], v["pinned"], v["shared"], utcnow(), nid))
+    db.commit()
+    if v["shared"] or n["shared"]:
+        touch()
+    return v
+
+
+@app.post("/api/notes")
+@login_required
+def create_note():
+    d = body()
+    kind = "page" if d.get("kind") == "page" else "sticky"
+    color = d.get("color") if d.get("color") in NOTE_COLORS else "yellow"
+    db = get_db()
+    nid = db.execute("INSERT INTO notes(owner_id, kind, title, body, color) VALUES (?,?,?,?,?)",
+                     (g.uid, kind, (d.get("title") or ("Untitled page" if kind == "page" else ""))[:200],
+                      (d.get("body") or "")[:100000], color)).lastrowid
+    db.commit()
+    return jsonify(note=one("SELECT * FROM notes WHERE id=?", (nid,))), 201
+
+
+@app.put("/api/notes/<int:nid>")
+@login_required
+def update_note(nid):
+    v = _note_save(nid, body())
+    if v is None:
+        return bad("Note not found", 404)
+    return jsonify(ok=True, updated_at=utcnow())
+
+
+@app.delete("/api/notes/<int:nid>")
+@login_required
+def delete_note(nid):
+    n = one("SELECT shared FROM notes WHERE id=? AND owner_id=?", (nid, g.uid))
+    if not n:
+        return bad("Note not found", 404)
+    get_db().execute("DELETE FROM notes WHERE id=?", (nid,))
+    get_db().commit()
+    if n["shared"]:
+        touch()
+    return jsonify(ok=True)
+
+
+# ── Suggestion box ──────────────────────────────────────────────────────────
+
+SUGGESTION_CATEGORIES = ("Idea", "Concern", "Process improvement", "Other")
+SUGGESTION_STATUS = {"new": "New", "review": "Under review", "planned": "Planned", "done": "Done", "declined": "Not now"}
+
+
+def suggestion_view(r, manager):
+    r = dict(r)
+    mine = r["author_id"] == g.uid
+    r["mine"] = mine
+    if r["anonymous"] and manager and not mine:
+        r["author_id"], r["author_name"], r["author_color"] = None, None, None   # never reveal an anonymous author
+    return r
+
+
+@app.get("/api/suggestions")
+@login_required
+def list_suggestions():
+    mgr = is_manager()
+    q = """SELECT s.*, a.name author_name, a.color author_color, rb.name replied_by_name FROM suggestions s
+        LEFT JOIN employees a ON a.id=s.author_id LEFT JOIN employees rb ON rb.id=s.replied_by"""
+    data = rows(q + " ORDER BY s.id DESC") if mgr else rows(q + " WHERE s.author_id=? ORDER BY s.id DESC", (g.uid,))
+    items = [suggestion_view(r, mgr) for r in data]
+    counts = {k: sum(1 for r in items if r["status"] == k) for k in SUGGESTION_STATUS}
+    return jsonify(items=items, counts=counts, categories=SUGGESTION_CATEGORIES, statuses=SUGGESTION_STATUS, manager=mgr)
+
+
+@app.post("/api/suggestions")
+@login_required
+def create_suggestion():
+    d = body()
+    title = (d.get("title") or "").strip()[:200]
+    if not title:
+        return bad("Write your suggestion in a line")
+    cat = d.get("category") if d.get("category") in SUGGESTION_CATEGORIES else "Idea"
+    anon = 1 if d.get("anonymous") in (1, True, "1", "true", "on") else 0
+    sid = execute("INSERT INTO suggestions(author_id, anonymous, category, title, body) VALUES (?,?,?,?,?)",
+                  (g.uid, anon, cat, title, (d.get("body") or "").strip()[:5000] or None))
+    who = "Someone (anonymous)" if anon else me()["name"]
+    article = "an" if anon or cat[0] in "AEIOU" else "a"
+    notify_managers("suggestion", f"sent {article} {'anonymous ' if anon else ''}{cat.lower()}: “{title}”", url="/#/suggestions", anonymous=bool(anon))
+    if not anon:
+        log("suggestion", f"sent a suggestion: {title}")
+    get_db().commit()
+    return jsonify(id=sid), 201
+
+
+@app.put("/api/suggestions/<int:sid>")
+@manager_required
+def respond_suggestion(sid):
+    s_ = one("SELECT * FROM suggestions WHERE id=?", (sid,))
+    if not s_:
+        return bad("Not found", 404)
+    d = body()
+    status = d.get("status") if d.get("status") in SUGGESTION_STATUS else s_["status"]
+    reply = (d.get("reply") if "reply" in d else s_["reply"]) or None
+    new_reply = reply and reply != s_["reply"]
+    execute("UPDATE suggestions SET status=?, reply=?, replied_by=CASE WHEN ?=1 THEN ? ELSE replied_by END, "
+            "replied_at=CASE WHEN ?=1 THEN ? ELSE replied_at END, updated_at=? WHERE id=?",
+            (status, reply, 1 if new_reply else 0, g.uid, 1 if new_reply else 0, utcnow(), utcnow(), sid))
+    if s_["author_id"] and (status != s_["status"] or new_reply):
+        what = f"replied to your suggestion “{s_['title']}”" if new_reply else f"marked your suggestion “{s_['title']}” as {SUGGESTION_STATUS[status]}"
+        notify_user(s_["author_id"], "suggestion", what, url="/#/suggestions")
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.delete("/api/suggestions/<int:sid>")
+@login_required
+def delete_suggestion(sid):
+    s_ = one("SELECT * FROM suggestions WHERE id=?", (sid,))
+    if not s_:
+        return bad("Not found", 404)
+    if not (me()["role"] == "admin" or (s_["author_id"] == g.uid and s_["status"] == "new")):
+        return bad("You can only withdraw your own suggestion before it's reviewed", 403)
+    execute("DELETE FROM suggestions WHERE id=?", (sid,))
+    return jsonify(ok=True)
+
+
+# ── Import from template (clients, expenses) ────────────────────────────────
+
+IMPORT_SPECS = {
+    "clients": [("Client name", True, "Acme Traders Pvt Ltd", "Required. Must be unique."),
+                ("Contact person", False, "Mr. Mehta", ""), ("Phone", False, "9876543210", ""),
+                ("Email", False, "accounts@acme.in", ""), ("GSTIN", False, "27AABCA1234A1Z5", ""),
+                ("Status", False, "Active", "Active or Archived. Blank = Active."), ("Notes", False, "Statutory audit client", "")],
+    "expenses": [("Date", True, "15-09-2026", "Required. DD-MM-YYYY (e.g. 15-09-2026)."),
+                 ("Description", True, "Cab to client office", "Required. What the money was spent on."),
+                 ("Amount", True, 450, "Required. Number only, no ₹ sign needed."),
+                 ("Category", False, "Conveyance", "One of the listed categories. Blank = Other."),
+                 ("Client", False, "Acme Traders Pvt Ltd", "Exact client name as in WorkDesk. Blank = office expense."),
+                 ("Project", False, "", "Optional. Project name under that client."),
+                 ("Spent by", False, "", "Team member's name. Blank = you."),
+                 ("Billable", False, "Yes", "Yes or No. Blank = Yes."),
+                 ("Status", False, "Approved", "Waiting approval, Approved, Rejected or Paid back. Blank = Approved."),
+                 ("Notes", False, "", "")],
+}
+EXP_STATUS_WORDS = {"waiting approval": "pending", "pending": "pending", "approved": "approved", "rejected": "rejected",
+                    "paid back": "reimbursed", "paid": "reimbursed", "reimbursed": "reimbursed"}
+
+
+def _norm_header(h):
+    return re.sub(r"[^a-z]", "", str(h or "").lower())
+
+
+@app.get("/api/import/template/<kind>.xlsx")
+@manager_required
+def import_template(kind):
+    if kind not in IMPORT_SPECS:
+        return bad("Unknown template", 404)
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.worksheet.datavalidation import DataValidation
+    spec = IMPORT_SPECS[kind]
+    wb = Workbook()
+    ws = wb.active
+    ws.title = kind.title()
+    head_fill, req_fill = PatternFill("solid", fgColor="4F46E5"), PatternFill("solid", fgColor="312E81")
+    for i, (col, req, example, _) in enumerate(spec, 1):
+        c = ws.cell(row=1, column=i, value=col + (" *" if req else ""))
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = req_fill if req else head_fill
+        c.alignment = Alignment(vertical="center")
+        ex = ws.cell(row=2, column=i, value=example if example != "" else None)
+        ex.font = Font(italic=True, color="64748B")
+        ws.column_dimensions[c.column_letter].width = max(16, len(col) + 6, len(str(example)) + 4)
+    ws.row_dimensions[1].height = 24
+    ws.freeze_panes = "A2"
+    def dropdown(col_name, options):
+        idx = [s_[0] for s_ in spec].index(col_name) + 1
+        letter = ws.cell(row=1, column=idx).column_letter
+        dv = DataValidation(type="list", formula1='"' + ",".join(options) + '"', allow_blank=True)
+        dv.add(f"{letter}2:{letter}2000")
+        ws.add_data_validation(dv)
+    if kind == "clients":
+        dropdown("Status", ["Active", "Archived"])
+    else:
+        dropdown("Category", EXPENSE_CATEGORIES)
+        dropdown("Billable", ["Yes", "No"])
+        dropdown("Status", ["Waiting approval", "Approved", "Rejected", "Paid back"])
+        clients = [r["name"] for r in rows("SELECT name FROM clients WHERE status='active' ORDER BY name")]
+        people = [r["name"] for r in rows("SELECT name FROM employees WHERE active=1 ORDER BY name")]
+        lists = wb.create_sheet("Lists")
+        for i, name in enumerate(clients, 1):
+            lists.cell(row=i, column=1, value=name)
+        for i, name in enumerate(people, 1):
+            lists.cell(row=i, column=2, value=name)
+        for col_name, letter, n in (("Client", "A", len(clients)), ("Spent by", "B", len(people))):
+            if n:
+                idx = [s_[0] for s_ in spec].index(col_name) + 1
+                cl = ws.cell(row=1, column=idx).column_letter
+                dv = DataValidation(type="list", formula1=f"=Lists!${letter}$1:${letter}${n}", allow_blank=True)
+                dv.add(f"{cl}2:{cl}2000")
+                ws.add_data_validation(dv)
+        lists.sheet_state = "hidden"
+    help_ws = wb.create_sheet("How to fill")
+    help_ws["A1"] = f"WorkDesk — {kind} import template"
+    help_ws["A1"].font = Font(bold=True, size=14)
+    help_ws["A2"] = "Fill one row per " + ("client" if kind == "clients" else "expense") + " on the first sheet. Row 2 is an example — replace or delete it. Columns marked * are required. Don't rename the column headings."
+    help_ws["A4"], help_ws["B4"] = "Column", "What to enter"
+    help_ws["A4"].font = help_ws["B4"].font = Font(bold=True)
+    for i, (col, req, _, tip) in enumerate(spec, 5):
+        help_ws.cell(row=i, column=1, value=col + (" *" if req else ""))
+        help_ws.cell(row=i, column=2, value=tip or "Optional.")
+    if kind == "expenses":
+        help_ws.cell(row=len(spec) + 6, column=1, value="Categories:").font = Font(bold=True)
+        help_ws.cell(row=len(spec) + 6, column=2, value=", ".join(EXPENSE_CATEGORIES))
+    help_ws.column_dimensions["A"].width, help_ws.column_dimensions["B"].width = 22, 90
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(buf.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename=WorkDesk-{kind}-template.xlsx"})
+
+
+def read_upload_rows():
+    """Returns list of dicts keyed by normalised header, from an uploaded .xlsx or .csv."""
+    f = request.files.get("file")
+    if not f or not f.filename:
+        raise ValueError("Choose the filled template to upload")
+    name = f.filename.lower()
+    data = f.read()
+    table = []
+    if name.endswith((".xlsx", ".xlsm")):
+        from openpyxl import load_workbook
+        try:
+            wb = load_workbook(io.BytesIO(data), data_only=True, read_only=True)
+        except Exception:
+            raise ValueError("Couldn't open that Excel file")
+        ws = wb.worksheets[0]
+        table = [list(r) for r in ws.iter_rows(values_only=True)]
+    elif name.endswith(".csv"):
+        text = data.decode("utf-8-sig", errors="replace")
+        table = list(csv.reader(io.StringIO(text)))
+    else:
+        raise ValueError("Upload the template as .xlsx (Excel) or .csv")
+    table = [r for r in table if any(str(c).strip() for c in r if c is not None)]
+    if len(table) < 2:
+        raise ValueError("The file has no rows to import")
+    headers = [_norm_header(h) for h in table[0]]
+    return [{headers[i]: (row[i] if i < len(row) else None) for i in range(len(headers))} | {"_row": n}
+            for n, row in enumerate(table[1:], 2)]
+
+
+def cell(r, *names):
+    for n in names:
+        v = r.get(_norm_header(n))
+        if v is not None and str(v).strip() != "":
+            return v.strip() if isinstance(v, str) else v
+    return None
+
+
+def parse_date_cell(v):
+    if isinstance(v, datetime):
+        return v.date().isoformat()
+    if isinstance(v, date):
+        return v.isoformat()
+    s_ = str(v).strip()
+    for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%d-%b-%Y", "%d %b %Y", "%d-%m-%y", "%d/%m/%y", "%d.%m.%Y"):
+        try:
+            return datetime.strptime(s_, fmt).date().isoformat()
+        except ValueError:
+            pass
+    return None
+
+
+def validate_import(kind, raw_rows, create_missing=False):
+    out = []
+    if kind == "clients":
+        existing = {r["name"].strip().lower() for r in rows("SELECT name FROM clients")}
+        seen = set()
+        for r in raw_rows:
+            name = cell(r, "Client name", "Name", "Client")
+            v = {"row": r.get("_row"), "name": str(name).strip() if name else "",
+                 "contact_person": cell(r, "Contact person", "Contact"), "phone": cell(r, "Phone", "Mobile"),
+                 "email": cell(r, "Email"), "gstin": cell(r, "GSTIN", "GST"), "notes": cell(r, "Notes"),
+                 "status": "archived" if str(cell(r, "Status") or "").lower().startswith("arch") else "active"}
+            for k in ("contact_person", "phone", "email", "gstin", "notes"):
+                v[k] = str(v[k]) if v[k] is not None else None
+            if v["phone"] and v["phone"].endswith(".0"):
+                v["phone"] = v["phone"][:-2]  # Excel numbers
+            key = v["name"].lower()
+            if not v["name"]:
+                v["error"] = "Client name is missing"
+            elif key in existing:
+                v["error"] = "Already in WorkDesk — skipped"
+            elif key in seen:
+                v["error"] = "Listed twice in this file"
+            seen.add(key)
+            out.append(v)
+        return out
+    clients = {r["name"].strip().lower(): r["id"] for r in rows("SELECT id, name FROM clients")}
+    people = {r["name"].strip().lower(): r["id"] for r in rows("SELECT id, name FROM employees WHERE active=1")}
+    cats = {c.lower(): c for c in EXPENSE_CATEGORIES}
+    for r in raw_rows:
+        amt_raw = cell(r, "Amount", "Amount (₹)", "Rs")
+        try:
+            amount = float(re.sub(r"[^\d.\-]", "", str(amt_raw))) if amt_raw is not None else None
+        except ValueError:
+            amount = None
+        client_name = cell(r, "Client")
+        v = {"row": r.get("_row"), "date": parse_date_cell(cell(r, "Date")) if cell(r, "Date") is not None else None,
+             "title": str(cell(r, "Description", "Title", "Expense") or "").strip(), "amount": amount,
+             "category": cats.get(str(cell(r, "Category") or "").strip().lower(), "Other"),
+             "client_name": str(client_name).strip() if client_name else None, "client_id": None,
+             "project_name": str(cell(r, "Project") or "").strip() or None, "project_id": None,
+             "employee_name": str(cell(r, "Spent by", "Employee", "Paid by") or "").strip() or None, "employee_id": g.uid,
+             "billable": 0 if str(cell(r, "Billable") or "yes").strip().lower() in ("no", "n", "0", "false") else 1,
+             "status": EXP_STATUS_WORDS.get(str(cell(r, "Status") or "approved").strip().lower(), "approved"),
+             "notes": str(cell(r, "Notes") or "").strip() or None}
+        problems, notes = [], []
+        if not v["date"]:
+            problems.append("Date missing or not DD-MM-YYYY")
+        if not v["title"]:
+            problems.append("Description missing")
+        if v["amount"] is None or v["amount"] <= 0:
+            problems.append("Amount missing or not a number")
+        if v["client_name"]:
+            v["client_id"] = clients.get(v["client_name"].lower())
+            if not v["client_id"]:
+                if create_missing:
+                    notes.append("New client will be created")
+                else:
+                    problems.append(f"Client “{v['client_name']}” not found")
+        if v["project_name"] and v["client_id"]:
+            v["project_id"] = scalar("SELECT id FROM projects WHERE client_id=? AND lower(name)=?", (v["client_id"], v["project_name"].lower()))
+            if not v["project_id"]:
+                notes.append("Project not found — saved without project")
+        if v["employee_name"]:
+            v["employee_id"] = people.get(v["employee_name"].lower())
+            if not v["employee_id"]:
+                problems.append(f"Team member “{v['employee_name']}” not found")
+        if str(cell(r, "Category") or "").strip() and str(cell(r, "Category")).strip().lower() not in cats:
+            notes.append("Unknown category — saved as Other")
+        if problems:
+            v["error"] = "; ".join(problems)
+        if notes:
+            v["note"] = "; ".join(notes)
+        out.append(v)
+    return out
+
+
+@app.post("/api/import/<kind>/preview")
+@manager_required
+def import_preview(kind):
+    if kind not in IMPORT_SPECS:
+        return bad("Unknown import", 404)
+    try:
+        raw = read_upload_rows()
+    except ValueError as e:
+        return bad(str(e))
+    if len(raw) > 2000:
+        return bad("Please import at most 2,000 rows at a time")
+    rows_ = validate_import(kind, raw, request.form.get("create_missing") in ("1", "true", "on"))
+    return jsonify(rows=rows_, ready=sum(1 for r in rows_ if not r.get("error")), errors=sum(1 for r in rows_ if r.get("error")))
+
+
+@app.post("/api/import/<kind>/commit")
+@manager_required
+def import_commit(kind):
+    if kind not in IMPORT_SPECS:
+        return bad("Unknown import", 404)
+    d = body()
+    # re-validate on the server; never trust the preview blindly
+    raw = [{_norm_header(k): v for k, v in r.items()} | {"_row": r.get("row")} for r in (d.get("rows") or [])]
+    if kind == "clients":
+        for r in raw:
+            r[_norm_header("Client name")] = r.get("name")
+            r[_norm_header("Contact person")] = r.get("contactperson")
+    else:
+        for r in raw:
+            r["description"], r["client"], r["project"], r["spentby"] = r.get("title"), r.get("clientname"), r.get("projectname"), r.get("employeename")
+            r["billable"] = "yes" if r.get("billable") in (1, "1", True) else "no"
+            r["status"] = {"pending": "waiting approval", "reimbursed": "paid back"}.get(r.get("status"), r.get("status"))
+    create_missing = bool(d.get("create_missing"))
+    valid = [v for v in validate_import(kind, raw, create_missing) if not v.get("error")]
+    db = get_db()
+    added = 0
+    new_clients = {}
+    if kind == "clients":
+        picked = []
+        for v in valid:
+            color = next_client_color(picked)
+            picked.append(color)
+            db.execute("INSERT INTO clients(name,contact_person,phone,email,gstin,notes,status,color) VALUES (?,?,?,?,?,?,?,?)",
+                       (v["name"], v["contact_person"], v["phone"], v["email"], v["gstin"], v["notes"], v["status"], color))
+            added += 1
+        log("client", f"imported {added} clients")
+    else:
+        for v in valid:
+            if v["client_name"] and not v["client_id"]:
+                key = v["client_name"].lower()
+                if key not in new_clients:
+                    new_clients[key] = db.execute("INSERT INTO clients(name,color) VALUES (?,?)",
+                                                  (v["client_name"], next_client_color())).lastrowid
+                v["client_id"] = new_clients[key]
+            db.execute("""INSERT INTO expenses(title,amount,category,date,client_id,project_id,employee_id,billable,status,notes)
+                VALUES (?,?,?,?,?,?,?,?,?,?)""", (v["title"], v["amount"], v["category"], v["date"], v["client_id"],
+                                                  v["project_id"], v["employee_id"], v["billable"], v["status"], v["notes"]))
+            added += 1
+        log("expense", f"imported {added} expenses" + (f" and {len(new_clients)} new clients" if new_clients else ""))
+    db.commit()
+    touch()
+    return jsonify(ok=True, added=added, new_clients=len(new_clients))
+
+
+# ── Storage summary & daily cloud backup (admin) ────────────────────────────
+# Everything already lives in Supabase. The daily backup is an extra safety copy: a zip of every WorkDesk table
+# (as JSON) saved to the private bucket under backups/, made by a Vercel cron job (vercel.json) or "Back up now".
+
+BACKUP_KEEP = 14
+BACKUP_TABLES = ("settings", "employees", "clients", "projects", "tasks", "time_logs", "expenses", "comments", "activity",
+                 "notifications", "conversations", "conversation_members", "messages", "attendance", "leaves", "compliance",
+                 "push_subs", "client_fees", "notes", "suggestions", "holidays")
+FREE_PLAN = {"database": 500 * 1024 ** 2, "files": 1024 ** 3}   # Supabase free plan limits
+
+
+def setting(key, default=None, db=None):
+    db = db or get_db()
+    r = db.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+    return r[0] if r else default
+
+
+def set_setting(key, value, db=None):
+    db = db or get_db()
+    db.execute("INSERT OR REPLACE INTO settings VALUES (?,?)", (key, value))
+    db.commit()
+
+
+def folder_usage(prefix):
+    """(bytes, file count) stored under a folder of the bucket."""
+    items = pg.list_files(prefix)
+    return sum(i["size"] for i in items), len(items)
+
+
+def make_backup():
+    try:
+        buf = io.BytesIO()
+        stamp = datetime.now().strftime("%Y-%m-%d")
+        name = f"WorkDesk-backup-{stamp}.zip"
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+            for t in BACKUP_TABLES:
+                data = rows(f"SELECT * FROM {t}")
+                if t == "settings":
+                    data = [r for r in data if r["key"] not in ("secret", "vapid_private")]
+                z.writestr(f"{t}.json", json.dumps(data, ensure_ascii=False, indent=1, default=str))
+            z.writestr("HOW-TO-RESTORE.txt",
+                       "WorkDesk backup made " + datetime.now().strftime("%d %b %Y %H:%M") + " (India time)\n\n"
+                       "Each .json file holds every row of one WorkDesk table (Supabase schema 'workdesk').\n"
+                       "Receipts, invoice scans and chat attachments stay in the Supabase Storage bucket 'workspace'\n"
+                       "(folders receipts/ and chat/); the file names in the tables point to them.\n"
+                       "To restore, load the rows back into the matching tables, e.g. with scripts/migrate_workspace.py.\n")
+        data = buf.getvalue()
+        pg.put_file("backups/" + name, data, "application/zip")
+        old = sorted(i["name"] for i in pg.list_files("backups/"))
+        if len(old) > BACKUP_KEEP:
+            pg.delete_files(["backups/" + n for n in old[:-BACKUP_KEEP]])
+        set_setting("backup_last", utcnow())
+        set_setting("backup_last_status", f"ok|{len(data)}|Supabase")
+        return name, len(data)
+    except Exception as e:
+        get_db().rollback()
+        set_setting("backup_last_status", "error|" + str(e)[:300])
+        raise
+
+
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*a, **kw):
+        if not me():
+            return jsonify(error="Please sign in"), 401
+        if me()["role"] != "admin":
+            return jsonify(error="Only an admin can do this"), 403
+        return fn(*a, **kw)
+    return wrapper
+
+
+@app.get("/api/admin/storage")
+@admin_required
+def storage_summary():
+    db_size = scalar("""SELECT COALESCE(SUM(pg_total_relation_size(c.oid)),0) FROM pg_class c
+        JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='workdesk' AND c.relkind='r'""")
+    try:
+        rec, rec_n = folder_usage("receipts/")
+        chat, chat_n = folder_usage("chat/")
+        backups = [{"name": i["name"], "size": i["size"], "at": i["at"]} for i in pg.list_files("backups/")]
+        files_error = None
+    except Exception as e:
+        rec = rec_n = chat = chat_n = 0
+        backups, files_error = [], str(e)
+    backups.sort(key=lambda b: b["name"], reverse=True)
+    bk = sum(b["size"] for b in backups)
+    status = (setting("backup_last_status", "") or "").split("|")
+    counts = {k: scalar(f"SELECT COUNT(*) FROM {k}") for k in ("tasks", "expenses", "time_logs", "messages", "attendance", "clients")}
+    return jsonify(
+        parts=[{"key": "database", "label": "Database (tasks, clients, time, attendance, chat)", "bytes": db_size},
+               {"key": "receipts", "label": f"Receipts & invoices ({rec_n} files)", "bytes": rec},
+               {"key": "chat", "label": f"Chat attachments ({chat_n} files)", "bytes": chat},
+               {"key": "backups", "label": f"Daily backups ({len(backups)} kept)", "bytes": bk}],
+        total=db_size + rec + chat + bk, counts=counts, files_error=files_error,
+        plan={"database": FREE_PLAN["database"], "files": FREE_PLAN["files"], "database_used": db_size, "files_used": rec + chat + bk},
+        auto=setting("backup_auto", "1") == "1",
+        last=setting("backup_last"), last_ok=status[0] == "ok", last_error=status[1] if status[0] == "error" else None,
+        last_size=int(status[1]) if status[0] == "ok" and len(status) > 1 else None,
+        backups=backups[:BACKUP_KEEP], keep=BACKUP_KEEP)
+
+
+@app.put("/api/admin/backup")
+@admin_required
+def backup_settings():
+    d = body()
+    if "auto" in d:
+        set_setting("backup_auto", "1" if d["auto"] in (1, True, "1", "true") else "0")
+    log("system", "changed backup settings")
+    get_db().commit()
+    return jsonify(ok=True)
+
+
+@app.post("/api/admin/backup/run")
+@admin_required
+def backup_now():
+    try:
+        name, size = make_backup()
+    except Exception as e:
+        return bad(str(e))
+    log("system", "backed up WorkDesk to Supabase Storage")
+    get_db().commit()
+    return jsonify(ok=True, name=name, size=size)
+
+
+@app.get("/api/admin/backups/<name>")
+@admin_required
+def download_backup(name):
+    if not re.fullmatch(r"WorkDesk-backup-\d{4}-\d{2}-\d{2}\.zip", name):
+        return bad("Not found", 404)
+    return stored_file("backups/" + name, name)
+
+
+@app.get("/api/cron/backup")
+def cron_backup():
+    """Called daily by Vercel Cron (vercel.json), which sends Authorization: Bearer $CRON_SECRET."""
+    secret = os.environ.get("CRON_SECRET", "")
+    if not secret or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {secret}"):
+        return bad("Not allowed", 401)
+    if setting("backup_auto", "1") != "1":
+        return jsonify(ok=True, skipped="auto backup is off")
+    last = setting("backup_last", "")
+    if last and parse_utc(last).astimezone().date() == date.today():
+        return jsonify(ok=True, skipped="already backed up today")
+    name, size = make_backup()
+    return jsonify(ok=True, name=name, size=size)
+
+
+# ── Frontend (served by Vercel as static files; these routes are for running locally) ──
+
+@app.get("/")
+def index():
+    resp = send_from_directory(STATIC_DIR, "index.html")
+    resp.headers["Cache-Control"] = "no-store"  # always serve the latest page
+    return resp
+
+
+@app.get("/vendor/<path:name>")
+def vendor(name):
+    return send_from_directory(STATIC_DIR / "vendor", name, max_age=86400)
+
+
+@app.post("/api/client-error")
+def client_error():
+    d = request.get_json(silent=True) or {}
+    print(f"[browser error] {str(d.get('msg'))[:500]} | {str(d.get('ua'))[:200]}", flush=True)
+    return jsonify(ok=True)
+
+
+@app.errorhandler(413)
+def too_big(_e):
+    return bad(f"File too large (max {MAX_UPLOAD_MB} MB)", 413)
+
+
+@app.errorhandler(Exception)
+def server_error(e):
+    from werkzeug.exceptions import HTTPException
+    if isinstance(e, HTTPException):
+        return e
+    print(f"[error] {request.method} {request.path}: {e!r}", flush=True)
+    db = g.pop("db", None)
+    if db:
+        db.close()
+    return bad("Something went wrong on the server. Please try again.", 500)
+
+
+app.secret_key = ensure_setup()
+app.config.update(
+    SESSION_COOKIE_NAME="wd_session", SESSION_COOKIE_PATH=BASE, SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=os.environ.get("WORKDESK_INSECURE_COOKIES") != "1", SESSION_COOKIE_HTTPONLY=True,
+    PERMANENT_SESSION_LIFETIME=timedelta(days=14),
+    # Only set the cookie at sign-in: a request still in flight during "Sign out" must not re-issue the old session.
+    SESSION_REFRESH_EACH_REQUEST=False)
+
+if __name__ == "__main__":
+    print(f"WorkDesk running — open http://127.0.0.1:{PORT}{BASE}/ in your browser")
+    app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)

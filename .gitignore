@@ -4,3 +4,6 @@ Thumbs.db
 .env
 .env.*
 .vscode/
+
+# Local WorkDesk / expense-tracker source: contains real bank statements, receipts and databases
+test-work-main/

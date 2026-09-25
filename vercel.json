@@ -1,5 +1,126 @@
 {
+  "regions": [
+    "sin1"
+  ],
+  "functions": {
+    "api/workdesk.py": {
+      "maxDuration": 60
+    },
+    "api/expenseflow.py": {
+      "maxDuration": 60
+    }
+  },
   "redirects": [
-    { "source": "/admin", "destination": "/admin/", "permanent": true }
+    {
+      "source": "/admin",
+      "destination": "/admin/",
+      "permanent": true
+    },
+    {
+      "source": "/employeeworkspace",
+      "destination": "/employeeworkspace/",
+      "permanent": true
+    },
+    {
+      "source": "/employeeworkspace/expenses",
+      "destination": "/employeeworkspace/expenses/",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/employeeworkspace/expenses/api/:path*",
+      "destination": "/api/expenseflow"
+    },
+    {
+      "source": "/employeeworkspace/api/:path*",
+      "destination": "/api/workdesk"
+    },
+    {
+      "source": "/employeeworkspace/receipts/:path*",
+      "destination": "/api/workdesk"
+    },
+    {
+      "source": "/employeeworkspace/receipts-scan/:path*",
+      "destination": "/api/workdesk"
+    },
+    {
+      "source": "/employeeworkspace/chat-files/:path*",
+      "destination": "/api/workdesk"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/employeeworkspace/:path*",
+      "headers": [
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "same-origin"
+        }
+      ]
+    },
+    {
+      "source": "/employeeworkspace/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/employeeworkspace/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/employeeworkspace/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/employeeworkspace/expenses/",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/employeeworkspace/expenses/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    }
+  ],
+  "crons": [
+    {
+      "path": "/employeeworkspace/api/cron/backup",
+      "schedule": "30 20 * * *"
+    }
   ]
 }
