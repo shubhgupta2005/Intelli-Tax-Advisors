@@ -8,6 +8,7 @@ Local run:  DATABASE_URL=… python -m api._workspace.workdesk   →  http://loc
 """
 import base64
 import csv
+import hashlib
 import hmac
 import json
 import zipfile
@@ -138,6 +139,7 @@ def ensure_setup():
     Tables come from supabase/004_workspace.sql; data from scripts/migrate_workspace.py (no demo data online)."""
     db = connect()
     try:
+        db.execute("ALTER TABLE employees ADD COLUMN IF NOT EXISTS permissions text")
         if not db.execute("SELECT 1 FROM settings WHERE key='vapid_private'").fetchone():
             priv, pub = make_vapid_keys()
             if priv:
@@ -172,10 +174,79 @@ def me():
         g.uid = None
         g.user = None
         if uid:
-            u = one("SELECT id,name,role,designation,color,hourly_cost FROM employees WHERE id=? AND active=1", (uid,))
+            u = one("SELECT id,name,role,designation,color,hourly_cost,permissions FROM employees WHERE id=? AND active=1", (uid,))
             if u:
                 g.uid, g.user = u["id"], u
     return g.user
+
+
+# ── Per-person permissions (set by an admin on the Team page; admins always have everything) ──
+# employees.permissions is JSON: {"sections": [...] or absent for all, "view_only": 0/1, "hide_money": 0/1}
+
+SECTIONS = ["dashboard", "my-work", "attendance", "compliance", "chat", "tasks", "clients", "projects", "team",
+            "timesheets", "expenses", "reports", "notes", "suggestions", "activity", "expenseflow"]
+MONEY_SECTIONS = {"expenses", "expenseflow"}        # closed to anyone who can't see money
+# API paths → the sections that may use them (paths not listed are open to everyone signed in)
+SECTION_PATHS = [
+    ("/api/clients", ("clients",)), ("/api/fees", ("clients",)), ("/api/projects", ("projects",)),
+    ("/api/employees", ("team",)), ("/api/reports", ("reports",)), ("/api/activity", ("activity",)),
+    ("/api/expenses", ("expenses",)), ("/receipts", ("expenses",)), ("/api/export/expenses", ("expenses",)),
+    ("/api/timelogs", ("timesheets", "my-work", "tasks")), ("/api/export/timelogs", ("timesheets", "reports")),
+    ("/api/export/tasks", ("tasks", "my-work")), ("/api/export/attendance", ("attendance",)),
+    ("/api/attendance/month", ("attendance",)), ("/api/attendance/today", ("attendance",)), ("/api/attendance/day", ("attendance",)),
+    ("/api/holidays", ("attendance",)), ("/api/compliance", ("compliance",)),
+    ("/api/chat", ("chat",)), ("/chat-files", ("chat",)), ("/api/notes", ("notes",)), ("/api/suggestions", ("suggestions",)),
+    ("/api/import/clients", ("clients",)), ("/api/import/expenses", ("expenses",)), ("/api/import/template/clients", ("clients",)),
+    ("/api/import/template/expenses", ("expenses",)),
+]
+# Things a view-only person may still do: their own sign-in, attendance, chat, notes and suggestions
+VIEW_ONLY_ALLOWED = ("/api/login", "/api/logout", "/api/gate", "/api/me/pin", "/api/attendance/punch", "/api/attendance/leave",
+                     "/api/chat/", "/api/notes", "/api/suggestions", "/api/push/", "/api/notifications/read", "/api/client-error")
+MONEY_KEYS = {"amount", "fee", "fees", "budget", "cost", "labour_cost", "hourly_cost", "expenses", "billable_expenses",
+              "retainer_amount", "retainer", "retainer_fees", "retainer_schedule", "extra", "extra_fees", "extra_to_bill",
+              "extra_billed", "extra_paid", "margin", "unreimbursed", "expenses_month", "pending_expenses", "fy",
+              "expense_by_client", "expense_by_category"}
+
+
+def perms(u=None):
+    u = u or me()
+    if not u or u["role"] == "admin":
+        return {"sections": None, "view_only": False, "hide_money": False}
+    try:
+        p = json.loads(u.get("permissions") or "{}")
+    except ValueError:
+        p = {}
+    sections = p.get("sections")
+    sections = [x for x in sections if x in SECTIONS] if isinstance(sections, list) else None
+    out = {"sections": sections, "view_only": bool(p.get("view_only")), "hide_money": bool(p.get("hide_money"))}
+    if out["hide_money"]:
+        out["sections"] = [x for x in (sections if sections is not None else SECTIONS) if x not in MONEY_SECTIONS]
+    return out
+
+
+def clean_permissions(d):
+    """Normalise what the Team form sends into the stored JSON."""
+    if not isinstance(d, dict):
+        return None
+    sec = d.get("sections")
+    sec = sorted(set(x for x in sec if x in SECTIONS)) if isinstance(sec, list) else None
+    if sec is not None and set(sec) == set(SECTIONS):
+        sec = None
+    return json.dumps({"sections": sec, "view_only": 1 if d.get("view_only") in (1, True, "1", "true") else 0,
+                       "hide_money": 1 if d.get("hide_money") in (1, True, "1", "true") else 0})
+
+
+def blank(x):
+    return [] if isinstance(x, list) else {} if isinstance(x, dict) else None
+
+
+def strip_money(v):
+    """Blank out money values but keep the keys, so pages still render (amounts show as "—")."""
+    if isinstance(v, dict):
+        return {k: blank(x) if k in MONEY_KEYS else strip_money(x) for k, x in v.items()}
+    if isinstance(v, list):
+        return [strip_money(x) for x in v]
+    return v
 
 
 def is_manager():
@@ -325,7 +396,10 @@ def login():
         return bad("Wrong PIN", 401)
     db.execute("DELETE FROM login_attempts WHERE employee_id=?", (eid,))
     db.commit()
+    gate = session.get("gate")
     session.clear()
+    if gate:
+        session["gate"] = gate
     session["uid"] = u["id"]
     session.permanent = True
     return jsonify(ok=True)
@@ -333,7 +407,100 @@ def login():
 
 @app.post("/api/logout")
 def logout():
+    gate = session.get("gate")      # signing out keeps this device's office-code pass
     session.clear()
+    if gate:
+        session["gate"] = gate
+        session.permanent = True
+    return jsonify(ok=True)
+
+
+# ── Office access code: a shared code asked once per device, before the sign-in screen ──
+# Admins set it in Settings (stored hashed); until then WORKDESK_OFFICE_CODE from Vercel is used. No code = no gate.
+
+GATE_FREE = {"/api/gate", "/api/client-error", "/api/cron/backup"}
+
+
+def office_code_hash():
+    h = scalar("SELECT value FROM settings WHERE key='office_code_hash'")
+    if h:
+        return h
+    env = os.environ.get("WORKDESK_OFFICE_CODE", "").strip()
+    return "sha256:" + hashlib.sha256(env.encode()).hexdigest() if env else None
+
+
+def gate_token(h):
+    return hashlib.sha256(h.encode()).hexdigest()[:24]   # changes whenever the code changes
+
+
+def office_code_matches(h, code):
+    if h.startswith("sha256:"):
+        return hmac.compare_digest(h, "sha256:" + hashlib.sha256(code.encode()).hexdigest())
+    return check_password_hash(h, code)
+
+
+@app.before_request
+def office_gate():
+    if request.path in GATE_FREE or not request.path.startswith(("/api/", "/receipts", "/chat-files")):
+        return None
+    h = office_code_hash()
+    if h and session.get("gate") != gate_token(h):
+        return jsonify(error="Enter the office access code", gate=True), 403
+    return None
+
+
+@app.before_request
+def permission_gate():
+    if not request.path.startswith(("/api/", "/receipts", "/chat-files")) or not me():
+        return None
+    p = perms()
+    if p["sections"] is not None:
+        for prefix, allowed in SECTION_PATHS:
+            if request.path.startswith(prefix) and not any(x in p["sections"] for x in allowed):
+                return bad("You don't have access to this section", 403)
+    if p["view_only"] and request.method != "GET" and not request.path.startswith(VIEW_ONLY_ALLOWED):
+        return bad("You have view-only access — ask an admin if you need to make changes", 403)
+    return None
+
+
+@app.after_request
+def hide_money_figures(resp):
+    if resp.is_json and request.path.startswith("/api/") and getattr(g, "user", None) and perms()["hide_money"]:
+        resp.set_data(json.dumps(strip_money(resp.get_json()), default=str))
+    return resp
+
+
+@app.post("/api/gate")
+def pass_gate():
+    code, ip = str(body().get("code", "")).strip(), client_ip()
+    db = get_db()
+    if scalar(f"SELECT COUNT(*) FROM login_attempts WHERE employee_id IS NULL AND ip=? AND at > now() - interval '{LOCK_MINUTES} minutes'",
+              (ip,)) >= MAX_TRIES_PERSON * 2:
+        return bad(f"Too many wrong codes. Try again in {LOCK_MINUTES} minutes.", 429)
+    h = office_code_hash()
+    if h and not office_code_matches(h, code):
+        db.execute("INSERT INTO login_attempts(employee_id, ip) VALUES (NULL, ?)", (ip,))
+        db.commit()
+        return bad("That code isn't right", 401)
+    if h:
+        session["gate"] = gate_token(h)
+        session.permanent = True
+    return jsonify(ok=True)
+
+
+@app.put("/api/settings/office-code")
+@login_required
+def set_office_code():
+    if me()["role"] != "admin":
+        return bad("Only an admin can change the office code", 403)
+    code = str(body().get("code", "")).strip()
+    if len(code) < 6:
+        return bad("Use at least 6 characters for the office code")
+    h = generate_password_hash(code)
+    get_db().execute("INSERT OR REPLACE INTO settings VALUES ('office_code_hash', ?)", (h,))
+    log("system", "changed the office access code")
+    get_db().commit()
+    session["gate"] = gate_token(h)          # keep this admin in; everyone else enters the new code
     return jsonify(ok=True)
 
 
@@ -346,7 +513,10 @@ def login_options():
 @app.get("/api/me")
 @login_required
 def get_me():
-    return jsonify(user=me(), is_manager=is_manager())
+    u = {k: v for k, v in me().items() if k != "permissions"}
+    if perms()["hide_money"]:
+        u.pop("hourly_cost", None)
+    return jsonify(user=u, is_manager=is_manager(), perms=perms())
 
 
 @app.put("/api/me/pin")
@@ -368,7 +538,8 @@ def change_pin():
 @app.get("/api/meta")
 @login_required
 def meta():
-    s = {r["key"]: r["value"] for r in rows("SELECT * FROM settings WHERE key!='secret'")}
+    s = {r["key"]: r["value"] for r in rows("SELECT * FROM settings WHERE key NOT IN ('secret','vapid_private','office_code_hash')")}
+    s["office_code_set"] = bool(office_code_hash())
     return jsonify(
         settings=s,
         clients=rows("SELECT id,name,color,status FROM clients ORDER BY name"),
@@ -706,7 +877,7 @@ def delete_project(pid):
 # ── Employees ───────────────────────────────────────────────────────────────
 
 EMP_ROLLUP = """
-SELECT e.id,e.name,e.email,e.phone,e.designation,e.role,e.hourly_cost,e.color,e.active,e.created_at,
+SELECT e.id,e.name,e.email,e.phone,e.designation,e.role,e.hourly_cost,e.color,e.active,e.created_at,e.permissions,
   (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status!='done') open_tasks,
   (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status='done') done_tasks,
   (SELECT COUNT(*) FROM tasks t WHERE t.assignee_id=e.id AND t.status!='done' AND t.due_date < date('now','localtime')) overdue_tasks,
@@ -762,10 +933,11 @@ def create_employee():
     role = d.get("role") if d.get("role") in ("admin", "manager", "employee") else "employee"
     if role == "admin" and me()["role"] != "admin":
         return bad("Only an admin can create another admin", 403)
-    eid = execute("""INSERT INTO employees(name,email,phone,designation,role,hourly_cost,color,pin_hash)
-                     VALUES (?,?,?,?,?,?,?,?)""",
+    permissions = clean_permissions(d.get("permissions")) if me()["role"] == "admin" else None
+    eid = execute("""INSERT INTO employees(name,email,phone,designation,role,hourly_cost,color,pin_hash,permissions)
+                     VALUES (?,?,?,?,?,?,?,?,?)""",
                   (d["name"].strip(), d.get("email"), d.get("phone"), d.get("designation"), role,
-                   num(d.get("hourly_cost")), d.get("color") or "#6366f1", generate_password_hash(pin)))
+                   num(d.get("hourly_cost")), d.get("color") or "#6366f1", generate_password_hash(pin), permissions))
     office = office_conv_id()
     get_db().execute("""INSERT OR IGNORE INTO conversation_members(conversation_id, employee_id, last_read_id)
         VALUES (?, ?, COALESCE((SELECT MAX(id) FROM messages WHERE conversation_id=?), 0))""", (office, eid, office))
@@ -788,6 +960,11 @@ def update_employee(eid):
     fields = [f for f in EMP_FIELDS if f in d]
     vals = [num(d[f]) if f == "hourly_cost" else (1 if d[f] in (1, True, "1", "true") else 0) if f == "active"
             else d[f] for f in fields]
+    if "permissions" in d:
+        if me()["role"] != "admin":
+            return bad("Only an admin can change what someone can access", 403)
+        fields.append("permissions")
+        vals.append(clean_permissions(d["permissions"]))
     if d.get("pin"):
         if len(str(d["pin"])) < 4:
             return bad("PIN must be at least 4 digits")
@@ -1514,7 +1691,7 @@ def export(kind):
         data = rows(f"{TIMELOG_SELECT} WHERE {where} ORDER BY l.started_at, l.id", args)
         cols = ["day", "employee_name", "client_name", "project_name", "task_title", "minutes", "note", "source"]
         head = ["Date", "Employee", "Client", "Project", "Task", "Minutes", "Note", "Source"]
-        if is_manager():
+        if is_manager() and not perms()["hide_money"]:
             cols.append("cost")
             head.append("Cost")
         return csv_response("timesheet.csv", head + ["Hours"],

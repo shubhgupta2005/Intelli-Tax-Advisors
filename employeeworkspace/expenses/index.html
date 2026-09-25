@@ -861,7 +861,10 @@ async function api(path, opts={}) {
       headers: {'Content-Type': 'application/json', ...opts.headers},
       ...opts
     });
-    if (r.status === 401 && !opts.headers?.['X-API-Key']) { location.href = '/employeeworkspace/'; throw new Error('Please sign in'); }
+    if ((r.status === 401 || r.status === 403) && !opts.headers?.['X-API-Key']) {
+      const e = await r.clone().json().catch(() => ({}));
+      if (r.status === 401 || e.login) { location.href = '/employeeworkspace/'; throw new Error(e.error || 'Please sign in'); }
+    }
     if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Request failed'); }
     return r.json();
   } catch(e) {

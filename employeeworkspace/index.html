@@ -180,6 +180,8 @@
   html.dark .hover\:bg-slate-800:hover { background-color:#36416a !important; }
   html.dark .theme-btn .sun { display:inline; } html.dark .theme-btn .moon { display:none; }
   .theme-btn .sun { display:none; } .theme-btn .moon { display:inline; }
+  body.view-only:not([data-page="settings"]):not([data-page="chat"]):not([data-page="notes"]):not([data-page="suggestions"]):not([data-page="attendance"]) #view :is(.btn-primary, .btn-go, .icon-btn[title="Edit"]),
+  body.view-only #tabbar button[aria-label] { display: none !important; }
 </style>
 </head>
 <body class="text-slate-800">
@@ -335,7 +337,7 @@ function hydrateIcons(root = document) { root.querySelectorAll('[data-ico]').for
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cur = () => S.meta?.settings?.currency || '₹';
-const money = n => (n < 0 ? '-' : '') + cur() + Math.abs(Number(n || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+const money = n => n == null || S.perm?.hide_money ? '—' : (n < 0 ? '-' : '') + cur() + Math.abs(Number(n || 0)).toLocaleString('en-IN', { maximumFractionDigits: 0 });
 const hm = m => { m = Math.round(m || 0); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`; };
 const hrs = m => ((m || 0) / 60).toFixed(1);
 const todayISO = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
@@ -411,6 +413,10 @@ async function api(path, opts = {}) {
   if (o.json !== undefined) { o.method = o.method || 'POST'; o.headers = { 'Content-Type': 'application/json' }; o.body = JSON.stringify(o.json); delete o.json; }
   const r = await fetch(path, o);
   if (r.status === 401 && !path.startsWith('/employeeworkspace/api/login')) { showLogin(); throw new Error('Please sign in'); }
+  if (r.status === 403 && path !== '/employeeworkspace/api/gate') {
+    const g = await r.clone().json().catch(() => ({}));
+    if (g.gate) { showLogin(); throw new Error('Please sign in'); }
+  }
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(data.error || 'Request failed (' + r.status + ')');
   return data;
@@ -426,7 +432,9 @@ async function showLogin() {
   hydrateIcons();
   $('#boot-loading')?.remove();
   $('#app').classList.add('hidden'); $('#login').classList.remove('hidden');
-  const d = await fetch('/employeeworkspace/api/login-options').then(r => r.json());
+  const lr = await fetch('/employeeworkspace/api/login-options');
+  if (lr.status === 403) return showGate();
+  const d = await lr.json();
   $('#login-company-hero').textContent = d.company ? '© ' + d.company : '';
   $('#login-body').innerHTML = `
     <h2 class="text-[28px] font-extrabold tracking-tight text-slate-900">Welcome back</h2>
@@ -436,6 +444,26 @@ async function showLogin() {
         ${avatar(e.name, e.color, 11)}<div class="flex-1 min-w-0"><div class="font-semibold text-slate-900">${esc(e.name)}</div><div class="text-xs text-slate-500">${esc(e.designation || '')}</div></div>
         <span class="text-slate-300 group-hover:text-indigo-500 transition">${ic('arrow')}</span>
       </button>`).join('')}</div>`;
+}
+function showGate(err) {
+  $('#login-body').innerHTML = `
+    <h2 class="text-[28px] font-extrabold tracking-tight text-slate-900">Intelli Workspace</h2>
+    <p class="text-slate-500 mt-1 mb-7">Enter the office access code to continue.</p>
+    <form onsubmit="passGate(event)">
+      <div class="relative"><span class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">${ic('lock')}</span>
+      <input id="gate-code" type="password" autocomplete="off" placeholder="Office code" class="field !pl-11 !py-3.5 text-lg !rounded-2xl" autofocus></div>
+      <div id="gate-err" class="text-sm text-red-600 h-5 mt-2">${esc(err || '')}</div>
+      <button class="btn btn-primary w-full !py-3.5 !rounded-2xl text-[15px] mt-1">Continue ${ic('arrow')}</button>
+      <p class="text-xs text-slate-400 text-center mt-4">Don't have the code? Ask your manager.</p>
+    </form>`;
+  setTimeout(() => $('#gate-code')?.focus(), 30);
+}
+async function passGate(e) {
+  e.preventDefault();
+  const r = await fetch('/employeeworkspace/api/gate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('#gate-code').value }) });
+  if (r.ok) return showLogin();
+  const d = await r.json().catch(() => ({}));
+  showGate(d.error || 'Please try again');
 }
 function pickUser(id, name, color) {
   $('#login-body').innerHTML = `<button onclick="showLogin()" class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-900 mb-8">${ic('back')} Not you?</button>
@@ -459,7 +487,8 @@ async function logout() { await api('/employeeworkspace/api/logout', { method: '
 async function boot() {
   try {
     const r = await api('/employeeworkspace/api/me');
-    S.me = r.user; S.isMgr = r.is_manager;
+    S.me = r.user; S.isMgr = r.is_manager; S.perm = r.perms || {};
+    document.body.classList.toggle('view-only', !!S.perm.view_only); document.body.classList.toggle('hide-money', !!S.perm.hide_money);
   } catch (e) {
     // 401 already showed the sign-in screen; anything else means the WorkDesk server couldn't be reached
     const b = $('#boot-loading');
@@ -472,7 +501,7 @@ async function boot() {
   $('#me-avatar').innerHTML = avatar(S.me.name, S.me.color, 9);
   $('#me-name').textContent = S.me.name; $('#me-role').textContent = S.me.designation || ROLE_LABEL[S.me.role];
   buildNav(); hydrateIcons(); renderTabbar(); registerSW();
-  if (!location.hash || location.hash === '#/') location.hash = S.isMgr ? '#/dashboard' : '#/my-work';
+  if (!location.hash || location.hash === '#/') location.hash = '#/' + homePage();
   await pollLive(true);
   render();
   startLoops();
@@ -583,7 +612,7 @@ function renderTabbar() {
   const items = S.isMgr
     ? [['dashboard', 'Home', 'home'], ['tasks', 'Tasks', 'board'], null, ['chat', 'Chat', 'message'], ['__more', 'More', 'menu']]
     : [['my-work', 'My Work', 'mywork'], ['attendance', 'Attendance', 'calendar'], null, ['chat', 'Chat', 'message'], ['__more', 'More', 'menu']];
-  $('#tabbar').innerHTML = items.map(it => it === null
+  $('#tabbar').innerHTML = items.filter(it => !it || it[0] === '__more' || canSee(it[0])).map(it => it === null
     ? `<div class="flex justify-center"><button onclick="${S.isMgr ? 'taskForm()' : 'selfWorkForm()'}" aria-label="${S.isMgr ? 'Give a task' : 'Add work I did'}" class="-mt-6 w-14 h-14 rounded-2xl text-white flex items-center justify-center shadow-xl shadow-indigo-300 bg-gradient-to-br from-indigo-500 to-violet-600 !text-white ring-4 ring-white">${ic('plus', 'w-7 h-7')}</button></div>`
     : it[0] === '__more'
       ? `<button onclick="toggleSidebar(true)" class="flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10.5px] font-semibold">${ic(it[2], 'w-[22px] h-[22px]')}${it[1]}</button>`
@@ -633,6 +662,9 @@ function toggleTheme() { setTheme(document.documentElement.classList.contains('d
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', () => { if (themePref() === 'auto') applyTheme('auto'); });
 
 // ─── Router & nav ────────────────────────────────────────────────────────────
+// Sections an admin has allowed for this person (settings is always open; admins see everything)
+const canSee = k => k === 'settings' || !S.perm?.sections || S.perm.sections.includes(k);
+const homePage = () => { const pref = S.isMgr ? ['dashboard', 'my-work'] : ['my-work', 'dashboard']; return pref.find(canSee) || NAV.map(n => n[0]).find(k => canSee(k) && (S.isMgr || !NAV.find(n => n[0] === k)[3])) || 'settings'; };
 // [route, label, icon, managerOnly, group, subtitle]
 const NAV = [
   ['dashboard', 'Home', 'home', true, 'Overview', 'Who is working on what, right now — and what needs attention'],
@@ -654,11 +686,11 @@ const NAV = [
 ];
 function buildNav() {
   let last = '';
-  $('#nav').innerHTML = NAV.filter(n => !n[3] || S.isMgr).map(([k, label, icon, , group]) => {
+  $('#nav').innerHTML = NAV.filter(n => (!n[3] || S.isMgr) && canSee(n[0])).map(([k, label, icon, , group]) => {
     const head = group !== last ? `<div class="nav-group">${group}</div>` : '';
     last = group;
     return head + `<a href="#/${k}" data-nav="${k}" onclick="toggleSidebar(false)" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic(icon, 'w-[18px] h-[18px]')}<span class="flex-1">${label}</span>${k === 'chat' ? '<span data-badge="chat" class="hidden min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold items-center justify-center"></span>' : ''}${k === 'suggestions' ? '<span data-badge="sug" class="hidden min-w-[20px] h-5 px-1.5 rounded-full bg-amber-400 text-amber-950 text-[11px] font-bold items-center justify-center"></span>' : ''}</a>`;
-  }).join('') + `<a href="/employeeworkspace/expenses/" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic('wallet', 'w-[18px] h-[18px]')}<span class="flex-1">ExpenseFlow</span><span class="text-xs opacity-60">↗</span></a>`;
+  }).join('') + (canSee('expenseflow') ? '' : '<!--') + `<a href="/employeeworkspace/expenses/" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic('wallet', 'w-[18px] h-[18px]')}<span class="flex-1">ExpenseFlow</span><span class="text-xs opacity-60">↗</span></a>` + (canSee('expenseflow') ? '' : '-->');
 }
 function toggleSidebar(open) {
   $('#sidebar').classList.toggle('-translate-x-full', !open);
@@ -675,7 +707,9 @@ async function render(soft) {
     projects: pageProjects, team: id ? () => pageEmployee(+id) : pageTeam, timesheets: pageTimesheets, expenses: pageExpenses,
     reports: pageReports, activity: pageActivity, settings: pageSettings, chat: () => pageChat(id ? +id : null), attendance: () => pageAttendance(id), compliance: pageCompliance, notes: () => pageNotes(id), suggestions: pageSuggestions };
   const mgrOnly = NAV.some(n => n[0] === page && n[3]);
-  const fn = (!S.isMgr && mgrOnly ? null : pages[page]) || (S.isMgr ? pageDashboard : pageMyWork);
+  if (page && pages[page] && !canSee(page)) { location.hash = '#/' + homePage(); return; }
+  document.body.dataset.page = page || '';
+  const fn = (!S.isMgr && mgrOnly ? null : pages[page]) || pages[homePage()];
   if (!soft) $('#view').innerHTML = `<div class="flex items-center justify-center gap-3 text-slate-400 text-sm p-16"><span class="w-4 h-4 rounded-full border-2 border-indigo-200 border-t-indigo-600 animate-spin"></span>Loading…</div>`;
   $('#view').classList.toggle('anim', !soft);
   try {
@@ -703,6 +737,7 @@ function openForm({ title, fields, values = {}, submit = 'Save', onSubmit, intro
       case 'employee': input = `<select name="${f.name}" class="field" ${req}>${opt(S.meta.employees.filter(e => e.active || e.id == val).map(e => [e.id, e.name]), val, f.blank ?? 'Not assigned yet')}</select>`; break;
       case 'checkbox': input = `<label class="flex items-center gap-3 text-sm rounded-xl border border-[var(--line)] px-3.5 py-3 cursor-pointer hover:bg-slate-50"><input type="checkbox" name="${f.name}" ${val && val !== '0' ? 'checked' : ''} class="w-4 h-4 accent-indigo-600"> <span class="text-slate-700">${esc(f.hint || '')}</span></label>`; break;
       case 'file': input = `<label class="flex items-center gap-3 rounded-xl border-2 border-dashed border-slate-200 px-4 py-3.5 cursor-pointer hover:border-indigo-300 hover:bg-indigo-50/40 transition"><span class="kpi-ico bg-indigo-50 text-indigo-600 !w-9 !h-9">${ic('clip')}</span><span class="min-w-0"><span class="block text-sm font-semibold text-slate-700" data-file-label>Attach a photo or PDF</span><span class="block text-xs text-slate-400">${f.hint || ''}</span></span><input type="file" name="${f.name}" accept="${f.accept || ''}" class="hidden" onchange="this.closest('label').querySelector('[data-file-label]').textContent = this.files[0]?.name || 'Attach a photo or PDF'"></label>`; break;
+      case 'sections': input = `<div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 rounded-xl border border-[var(--line)] p-3">${f.options.map(([k, l]) => `<label class="flex items-center gap-2 text-sm text-slate-700 cursor-pointer"><input type="checkbox" name="${f.name}" value="${k}" ${!Array.isArray(val) || val.includes(k) ? 'checked' : ''} class="w-4 h-4 accent-indigo-600">${esc(l)}</label>`).join('')}</div>`; break;
       case 'color': input = `<input type="color" name="${f.name}" value="${esc(val || '#6366f1')}" class="h-11 w-full rounded-xl border border-[var(--line)] p-1 bg-white">`; break;
       default: input = `<input type="${f.type || 'text'}" name="${f.name}" value="${esc(val)}" class="field" ${req} ${f.step ? `step="${f.step}"` : ''} ${f.min !== undefined ? `min="${f.min}"` : ''} placeholder="${esc(f.placeholder || '')}" ${f.autofocus ? 'autofocus' : ''} inputmode="${f.inputmode || ''}">`;
     }
@@ -733,7 +768,7 @@ function openForm({ title, fields, values = {}, submit = 'Save', onSubmit, intro
   form.onsubmit = async e => {
     e.preventDefault();
     const fd = new FormData(form), out = {};
-    fields.forEach(f => { out[f.name] = f.type === 'checkbox' ? (fd.get(f.name) ? 1 : 0) : f.type === 'file' ? fd.get(f.name) : (fd.get(f.name) ?? ''); });
+    fields.forEach(f => { out[f.name] = f.type === 'sections' ? fd.getAll(f.name) : f.type === 'checkbox' ? (fd.get(f.name) ? 1 : 0) : f.type === 'file' ? fd.get(f.name) : (fd.get(f.name) ?? ''); });
     const btn = $('#mform-submit'); btn.disabled = true; btn.style.opacity = .6;
     try { await onSubmit(out, fd); closeModal(); }
     catch (err) { $('#mform-err').textContent = err.message; btn.disabled = false; btn.style.opacity = 1; }
@@ -1370,7 +1405,7 @@ async function pageTasks() {
 const PERIOD_LABEL = { monthly: 'month', quarterly: 'quarter', yearly: 'year' };
 const FEE_ST = { to_bill: ['To bill', 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'], billed: ['Billed', 'bg-blue-50 text-blue-700 ring-1 ring-blue-200'], paid: ['Paid', 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'] };
 const retainerText = c => c.retainer_amount > 0 && c.retainer_period && c.retainer_period !== 'none' ? `${money(c.retainer_amount)} / ${PERIOD_LABEL[c.retainer_period]}` : '';
-const moneyShort = n => { n = +n || 0; const a = Math.abs(n); return (n < 0 ? '-' : '') + cur() + (a >= 1e7 ? (a / 1e7).toFixed(2).replace(/\.?0+$/, '') + ' Cr' : a >= 1e5 ? (a / 1e5).toFixed(2).replace(/\.?0+$/, '') + ' L' : a >= 1e3 ? (a / 1e3).toFixed(1).replace(/\.0$/, '') + 'k' : Math.round(a)); };
+const moneyShort = n => { if (n == null || S.perm?.hide_money) return '—'; n = +n || 0; const a = Math.abs(n); return (n < 0 ? '-' : '') + cur() + (a >= 1e7 ? (a / 1e7).toFixed(2).replace(/\.?0+$/, '') + ' Cr' : a >= 1e5 ? (a / 1e5).toFixed(2).replace(/\.?0+$/, '') + ' L' : a >= 1e3 ? (a / 1e3).toFixed(1).replace(/\.0$/, '') + 'k' : Math.round(a)); };
 
 async function pageClients() {
   setTitle('Clients');
@@ -1596,8 +1631,14 @@ async function pageTeam() {
 }
 function employeeForm(e = {}) {
   const isNew = !e.id;
-  const roles = [['employee', 'Staff — sees only their own tasks'], ['manager', 'Manager — sees and assigns everything']];
-  if (S.me.role === 'admin') roles.push(['admin', 'Admin — full access']);
+  const roles = [['employee', 'Staff — sees only their own tasks, time & expenses'], ['manager', 'Manager — sees and assigns everything']];
+  if (S.me.role === 'admin') roles.push(['admin', 'Admin — full access to everything']);
+  let p = {}; try { p = JSON.parse(e.permissions || '{}') || {}; } catch (_) {}
+  const accessFields = S.me.role !== 'admin' ? [] : [
+    { name: 'perm_sections', label: 'Sections they can open', help: 'Admins always see everything', type: 'sections', value: p.sections,
+      options: NAV.filter(n => n[0] !== 'settings').map(n => [n[0], n[1]]).concat([['expenseflow', 'ExpenseFlow']]) },
+    { name: 'perm_view_only', type: 'checkbox', half: true, value: p.view_only, hint: 'View only — can look but not add, edit or delete' },
+    { name: 'perm_hide_money', type: 'checkbox', half: true, value: p.hide_money, hint: 'Hide money — no fees, costs or amounts (also closes Expenses & ExpenseFlow)' }];
   openForm({
     title: isNew ? 'Add a person' : 'Edit ' + e.name, icon: 'users', sub: isNew ? 'They sign in by tapping their name and typing this PIN.' : '', submit: isNew ? 'Add person' : 'Save changes', values: { role: 'employee', color: '#' + Math.floor(Math.random() * 0xcccccc + 0x222222).toString(16), active: 1, ...e },
     fields: [{ name: 'name', label: 'Full name', required: true, autofocus: true }, { name: 'designation', label: 'Job title', half: true, placeholder: 'e.g. Associate' },
@@ -1606,9 +1647,11 @@ function employeeForm(e = {}) {
       { name: 'hourly_cost', label: `Cost per hour (${cur()})`, type: 'number', min: 0, half: true, placeholder: 'e.g. 400', help: 'monthly salary ÷ ~200' },
       { name: 'pin', label: isNew ? 'Sign-in PIN' : 'New PIN', help: isNew ? '4+ digits' : 'leave blank to keep', type: 'password', required: isNew, half: true, inputmode: 'numeric', placeholder: '4+ digits' },
       { name: 'color', label: 'Colour', type: 'color', half: true },
-      ...(isNew ? [] : [{ name: 'active', type: 'checkbox', hint: 'Active — can sign in and receive tasks' }])],
+      ...(isNew ? [] : [{ name: 'active', type: 'checkbox', hint: 'Active — can sign in and receive tasks' }]), ...accessFields],
     onSubmit: async v => {
       if (!v.pin) delete v.pin;
+      if ('perm_sections' in v) { v.permissions = { sections: v.perm_sections, view_only: v.perm_view_only, hide_money: v.perm_hide_money }; }
+      delete v.perm_sections; delete v.perm_view_only; delete v.perm_hide_money;
       await api('/employeeworkspace/api/employees' + (isNew ? '' : '/' + e.id), { method: isNew ? 'POST' : 'PUT', json: v });
       toast(isNew ? `${v.name} added — share their PIN with them` : 'Saved'); await loadMeta(); await afterChange();
     }
@@ -2540,6 +2583,9 @@ async function pageSettings() {
     <div class="card p-5" id="phone-card"><div class="flex items-start gap-3 mb-3"><span class="kpi-ico bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600">${ic('bell')}</span><div><h3 class="font-bold text-slate-900">Phone app & notifications</h3><p class="text-sm text-slate-500">Get alerts on this phone even when WorkDesk is closed${S.isMgr ? ' — new work from staff, tasks ready for review, leave, filings and messages' : ' — new tasks for you and chat messages'}.</p></div></div>
       <div id="push-status" class="text-sm text-slate-500">Checking…</div></div>
     <div class="card p-5">${phoneGuide()}</div>
+    ${S.me.role === 'admin' ? `<div class="card p-5"><h3 class="font-semibold mb-1">Office access code</h3>
+      <p class="text-sm text-slate-500 mb-3">${s.office_code_set ? 'Everyone enters this shared code once on each device before they see the sign-in screen. Changing it asks every device for the new code.' : 'No code is set, so anyone with the link can see the sign-in screen. Set one to add a shared office code before sign-in.'}</p>
+      <form onsubmit="saveOfficeCode(event)" class="flex flex-wrap gap-3"><input name="code" type="password" autocomplete="new-password" minlength="6" required placeholder="New office code (6+ characters)" class="field flex-1 min-w-[200px]"><button class="btn btn-primary">${s.office_code_set ? 'Change code' : 'Set code'}</button></form></div>` : ''}
     <div class="card p-5"><h3 class="font-semibold mb-3">Change my PIN</h3><form onsubmit="changePin(event)" class="grid grid-cols-2 gap-4">
       <div class="col-span-2 sm:col-span-1"><label class="block text-xs font-semibold text-slate-600 mb-1">Current PIN</label><input name="old_pin" type="password" inputmode="numeric" class="field" required></div>
       <div class="col-span-2 sm:col-span-1"><label class="block text-xs font-semibold text-slate-600 mb-1">New PIN</label><input name="new_pin" type="password" inputmode="numeric" class="field" required minlength="4"></div>
@@ -2610,6 +2656,7 @@ async function runBackup() {
   renderStorage();
 }
 async function saveSettings(e) { e.preventDefault(); await run(() => api('/employeeworkspace/api/settings', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'Settings saved'); await loadMeta(); }
+async function saveOfficeCode(e) { e.preventDefault(); await run(() => api('/employeeworkspace/api/settings/office-code', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'Office code saved'); e.target.reset(); await loadMeta(); render(true); }
 async function changePin(e) { e.preventDefault(); await run(() => api('/employeeworkspace/api/me/pin', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'PIN updated'); e.target.reset(); }
 function resetData() {
   openForm({ title: 'Clear all data?', danger: true, submit: 'Delete everything', intro: '<p class="text-sm text-slate-600 mb-3">This cannot be undone. Team members are kept.</p>',

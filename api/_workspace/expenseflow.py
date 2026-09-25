@@ -113,9 +113,20 @@ def require_login():
         db.commit()
         return None
     uid = session.get("uid")
-    if uid and db.execute("SELECT 1 FROM workdesk.employees WHERE id=? AND active=1", (uid,)).fetchone():
-        return None
-    return jsonify({"error": "Please sign in to Intelli Workspace", "login": "/employeeworkspace/"}), 401
+    u = db.execute("SELECT role, permissions FROM workdesk.employees WHERE id=? AND active=1", (uid,)).fetchone() if uid else None
+    if not u:
+        return jsonify({"error": "Please sign in to Intelli Workspace", "login": "/employeeworkspace/"}), 401
+    if u["role"] != "admin":
+        try:
+            p = json.loads(u["permissions"] or "{}")
+        except ValueError:
+            p = {}
+        sections = p.get("sections")
+        if p.get("hide_money") or (isinstance(sections, list) and "expenseflow" not in sections):
+            return jsonify({"error": "You don't have access to ExpenseFlow", "login": "/employeeworkspace/"}), 403
+        if p.get("view_only") and request.method != "GET":
+            return jsonify({"error": "You have view-only access — ask an admin if you need to make changes"}), 403
+    return None
 
 
 def row_to_dict(row):
