@@ -429,6 +429,7 @@ const qs = obj => new URLSearchParams(Object.entries(obj).filter(([, v]) => v !=
 // ─── Auth ────────────────────────────────────────────────────────────────────
 async function showLogin() {
   stopLoops();
+  S.charts.forEach(c => c.destroy()); S.charts = [];
   hydrateIcons();
   $('#boot-loading')?.remove();
   $('#app').classList.add('hidden'); $('#login').classList.remove('hidden');
@@ -1251,7 +1252,9 @@ function chart(id, cfg) {
   for (const k in (cfg.options?.scales || {})) merged[k] = { ...(merged[k] || {}), ...cfg.options.scales[k] };
   const c = new Chart(el, { ...cfg, options: { responsive: true, maintainAspectRatio: false, ...cfg.options, scales: merged, plugins: { legend: { display: false }, tooltip: { backgroundColor: '#0f1430', padding: 10, cornerRadius: 10, titleFont: { weight: '700' } }, ...(cfg.options?.plugins || {}) } } });
   S.charts.push(c);
-  requestAnimationFrame(() => c.resize()); setTimeout(() => c.resize(), 120);
+  // the page may have moved on before these run; a destroyed chart has no canvas left to resize
+  const fit = () => { if (c.canvas && c.canvas.isConnected) c.resize(); };
+  requestAnimationFrame(fit); setTimeout(fit, 120);
 }
 function liveTeam(team) {
   return team.map(e => {
@@ -1629,8 +1632,13 @@ async function pageTeam() {
     <td><button onclick="event.stopPropagation();employeeForm(S.empCache[${e.id}])" class="icon-btn" title="Edit">${ic('edit')}</button></td></tr>`).join('')}
   </tbody></table></div>`;
 }
+// Positions in the firm (the Job title list on the Team form); anything else goes in "Other…"
+const JOB_TITLES = ['Partner', 'Director', 'Senior Manager', 'Manager', 'Assistant Manager', 'Senior Associate', 'Associate',
+  'Semi-qualified Assistant', 'Article Assistant', 'Intern', 'Tax Consultant', 'Accountant', 'Accounts Assistant',
+  'Office Administrator', 'Front Office / Receptionist', 'Office Assistant'];
 function employeeForm(e = {}) {
   const isNew = !e.id;
+  const custom = e.designation && !JOB_TITLES.includes(e.designation);
   const roles = [['employee', 'Staff — sees only their own tasks, time & expenses'], ['manager', 'Manager — sees and assigns everything']];
   if (S.me.role === 'admin') roles.push(['admin', 'Admin — full access to everything']);
   let p = {}; try { p = JSON.parse(e.permissions || '{}') || {}; } catch (_) {}
@@ -1640,9 +1648,12 @@ function employeeForm(e = {}) {
     { name: 'perm_view_only', type: 'checkbox', half: true, value: p.view_only, hint: 'View only — can look but not add, edit or delete' },
     { name: 'perm_hide_money', type: 'checkbox', half: true, value: p.hide_money, hint: 'Hide money — no fees, costs or amounts (also closes Expenses & ExpenseFlow)' }];
   openForm({
-    title: isNew ? 'Add a person' : 'Edit ' + e.name, icon: 'users', sub: isNew ? 'They sign in by tapping their name and typing this PIN.' : '', submit: isNew ? 'Add person' : 'Save changes', values: { role: 'employee', color: '#' + Math.floor(Math.random() * 0xcccccc + 0x222222).toString(16), active: 1, ...e },
-    fields: [{ name: 'name', label: 'Full name', required: true, autofocus: true }, { name: 'designation', label: 'Job title', half: true, placeholder: 'e.g. Associate' },
+    title: isNew ? 'Add a person' : 'Edit ' + e.name, icon: 'users', sub: isNew ? 'They sign in by tapping their name and typing this PIN.' : '', submit: isNew ? 'Add person' : 'Save changes', values: { role: 'employee', color: '#' + Math.floor(Math.random() * 0xcccccc + 0x222222).toString(16), active: 1, ...e,
+      designation: custom ? '__other' : (e.designation || ''), designation_other: custom ? e.designation : '' },
+    fields: [{ name: 'name', label: 'Full name', required: true, autofocus: true },
+      { name: 'designation', label: 'Job title', type: 'select', half: true, blank: 'Choose…', options: JOB_TITLES.map(t => [t, t]).concat([['__other', 'Other…']]) },
       { name: 'role', label: 'What can they see?', type: 'select', half: true, options: roles },
+      { name: 'designation_other', label: 'Job title (other)', placeholder: 'Type the job title' },
       { name: 'email', label: 'Email', type: 'email', half: true }, { name: 'phone', label: 'Phone', half: true },
       { name: 'hourly_cost', label: `Cost per hour (${cur()})`, type: 'number', min: 0, half: true, placeholder: 'e.g. 400', help: 'monthly salary ÷ ~200' },
       { name: 'pin', label: isNew ? 'Sign-in PIN' : 'New PIN', help: isNew ? '4+ digits' : 'leave blank to keep', type: 'password', required: isNew, half: true, inputmode: 'numeric', placeholder: '4+ digits' },
@@ -1650,12 +1661,18 @@ function employeeForm(e = {}) {
       ...(isNew ? [] : [{ name: 'active', type: 'checkbox', hint: 'Active — can sign in and receive tasks' }]), ...accessFields],
     onSubmit: async v => {
       if (!v.pin) delete v.pin;
+      v.designation = v.designation === '__other' ? (v.designation_other || '').trim() : v.designation;
+      delete v.designation_other;
       if ('perm_sections' in v) { v.permissions = { sections: v.perm_sections, view_only: v.perm_view_only, hide_money: v.perm_hide_money }; }
       delete v.perm_sections; delete v.perm_view_only; delete v.perm_hide_money;
       await api('/employeeworkspace/api/employees' + (isNew ? '' : '/' + e.id), { method: isNew ? 'POST' : 'PUT', json: v });
       toast(isNew ? `${v.name} added — share their PIN with them` : 'Saved'); await loadMeta(); await afterChange();
     }
   });
+  // show the free-text box only for "Other…"
+  const sel = $('#mform [name=designation]'), other = $('#mform [name=designation_other]');
+  const sync = () => { other.parentElement.classList.toggle('hidden', sel.value !== '__other'); if (sel.value === '__other') other.focus(); };
+  sel.addEventListener('change', sync); other.parentElement.classList.toggle('hidden', sel.value !== '__other');
 }
 async function pageEmployee(id) {
   const [e, tasks, logs, exps] = await Promise.all([api('/employeeworkspace/api/employees/' + id), api('/employeeworkspace/api/tasks?assignee_id=' + id), api('/employeeworkspace/api/timelogs?employee_id=' + id), api('/employeeworkspace/api/expenses?employee_id=' + id)]);

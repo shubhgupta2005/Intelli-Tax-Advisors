@@ -69,6 +69,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("folder", help='the office "Expense Tracker Claude" folder')
     ap.add_argument("--replace", action="store_true", help="delete the online WorkDesk/ExpenseFlow data first")
+    ap.add_argument("--set-pin", action="append", default=[], metavar='"NAME=PIN"',
+                    help='give someone a new PIN after copying, e.g. --set-pin "Ankit Aggarwal=482913" (repeatable)')
     a = ap.parse_args()
     root = Path(a.folder)
     wd_db, ef_db = root / "workdesk" / "workdesk.db", root / "backend" / "expenses.db"
@@ -76,6 +78,9 @@ def main():
         if not p.is_file():
             sys.exit(f"Not found: {p}")
 
+    for k in ("DATABASE_URL", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):   # pasted values often carry quotes/newlines
+        if k in os.environ:
+            os.environ[k] = os.environ[k].strip().strip('"').strip("'").strip()
     conn = psycopg.connect(os.environ["DATABASE_URL"], prepare_threshold=None)
     cur = conn.cursor()
     cur.execute("SELECT (SELECT COUNT(*) FROM workdesk.employees) + (SELECT COUNT(*) FROM expenseflow.expenses)")
@@ -110,6 +115,14 @@ def main():
         counts["expenseflow." + t] = copy_table(lite, cur, "expenseflow", t, hash_key if t == "api_keys" else None)
     attachments = [r[0] for r in lite.execute("SELECT filename FROM attachments")]
     lite.close()
+    for item in a.set_pin:
+        name, _, pin = item.partition("=")
+        if len(pin.strip()) < 4:
+            sys.exit(f"--set-pin {item!r}: the PIN must be at least 4 digits")
+        from werkzeug.security import generate_password_hash
+        cur.execute("UPDATE workdesk.employees SET pin_hash=%s WHERE lower(trim(name))=lower(trim(%s))",
+                    (generate_password_hash(pin.strip(), method="pbkdf2:sha256"), name))
+        print(f"New PIN set for {name.strip()}" if cur.rowcount else f"Warning: nobody named {name.strip()!r} — PIN not set")
     conn.commit()
 
     print("Rows copied:")
