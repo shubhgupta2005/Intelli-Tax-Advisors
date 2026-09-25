@@ -346,3 +346,19 @@
   @media (max-width:760px){.prow{grid-template-columns:1fr;gap:12px;padding:24px 4px}.prow .when{flex-direction:row;gap:16px}.prow .mins{text-align:left}a.prow:hover{padding-inline:12px}}
   .article .cta{margin-top:64px;padding-top:32px;border-top:1px solid var(--ink);display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:space-between}
   .article .cta p{margin:0;font:400 clamp(22px,2.4vw,28px)/1.3 var(--serif)}
+
+  /* ---------- WhatsApp button (all pages) ---------- */
+  .wa-float{position:fixed;right:20px;bottom:20px;z-index:60;display:flex;align-items:center;gap:10px;height:56px;min-width:56px;padding:0 16px;
+    border-radius:28px;background:var(--ink);color:var(--white);border:1px solid rgba(255,255,255,.22);box-shadow:0 10px 30px rgba(0,0,0,.25);
+    font:500 14px/1 var(--sans);transition:transform .2s,background .2s}
+  .wa-float svg{width:24px;height:24px;flex:none}
+  .wa-float span{max-width:0;overflow:hidden;white-space:nowrap;transition:max-width .3s}
+  .wa-float:hover{transform:translateY(-2px);background:var(--graphite)}
+  .wa-float:hover span,.wa-float:focus-visible span{max-width:140px}
+  @media (max-width:640px){.wa-float{right:16px;bottom:16px}}
+  @media (prefers-reduced-motion:reduce){.wa-float,.wa-float span{transition:none}}
+  .form-privacy{margin:14px 0 0;font-size:12.5px;color:var(--ash)}
+  .form-privacy a{border-bottom:1px solid currentColor}
+  .article .content ul{margin:0 0 20px;padding-left:22px}
+  .article .content li{margin:0 0 8px}
+  .article .content a{border-bottom:1px solid currentColor}

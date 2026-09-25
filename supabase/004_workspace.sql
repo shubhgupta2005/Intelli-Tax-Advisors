@@ -402,6 +402,9 @@ create table if not exists expenseflow.api_keys (
 );
 
 
+-- Later additions (leave requests, client documents, salary) are created by the server on start-up:
+-- see SCHEMA_ADDITIONS in api/_workspace/workdesk.py.
+
 -- Defence in depth: RLS on, no policies, so even if a schema were exposed nothing is readable through the API.
 do $$
 declare r record;

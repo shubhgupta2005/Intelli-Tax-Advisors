@@ -9,6 +9,7 @@ window.DEFAULT_CONTENT = {
     instagram_url: 'https://www.instagram.com/intellitaxadvisors',
     linkedin_url: 'https://www.linkedin.com/search/results/all/?keywords=Intelli%20Tax%20Advisors',
     clients_more: '80+',
+    whatsapp: '+91 99997 94546',
   },
 
   services: [

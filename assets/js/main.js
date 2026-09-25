@@ -107,6 +107,8 @@
     $('vHours').textContent = s.hours;
     if (s.instagram_url) $('lnInstagram').href = s.instagram_url;
     if (s.linkedin_url) $('lnLinkedin').href = s.linkedin_url;
+    const wa = $('waFloat'), digits = String(s.whatsapp || '').replace(/\D/g, '');
+    if (wa) { if (digits.length >= 10) wa.href = wa.href.replace(/wa\.me\/\d+/, 'wa.me/' + digits); else wa.hidden = true; }
   }
 
   // ---- Page sections (copy edited under "Page sections" in the admin portal)
@@ -200,6 +202,8 @@
   function showSent(name){
     form.innerHTML = `<div class="sent" role="status"><b>Thank you, ${esc(name.split(' ')[0])}.</b><span>Your request is with the partners. Expect a reply within one business day.</span></div>`;
   }
+  let typedAt = 0;   // when a person first typed in the form (bots fill it without typing)
+  form.addEventListener('input', () => { typedAt = typedAt || Date.now(); });
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const f = form, fld = n => f.elements.namedItem(n);
@@ -210,6 +214,7 @@
     if (!data.name) { note.textContent = 'Add your name so a partner knows who to call.'; fld('name').focus(); return; }
     if (!/^\S+@\S+\.\S+$/.test(data.email)) { note.textContent = 'Enter an email like name@company.com so we can reply.'; fld('email').focus(); return; }
     if (fld('website').value) { showSent(data.name); return; } // honeypot: silently drop bots
+    if (!typedAt || Date.now() - typedAt < 2500) { showSent(data.name); return; } // no typing, or form done in under 2.5 s: a bot
 
     if (!Api.enabled) { mailtoFallback(data); return; }
     f.setAttribute('aria-busy', 'true'); note.textContent = 'Sending…';

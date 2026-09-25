@@ -47,6 +47,10 @@
     {
       "source": "/employeeworkspace/chat-files/:path*",
       "destination": "/api/workdesk"
+    },
+    {
+      "source": "/employeeworkspace/client-docs/:path*",
+      "destination": "/api/workdesk"
     }
   ],
   "headers": [

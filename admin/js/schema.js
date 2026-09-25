@@ -123,6 +123,7 @@ window.SCHEMA = (function(){
     {key:'phone', label:'Phone', type:'text', required:true},
     {key:'address', label:'Office address', type:'text', full:true, required:true},
     {key:'hours', label:'Hours', type:'text'},
+    {key:'whatsapp', label:'WhatsApp number', type:'text', help:'For the WhatsApp button on every page, with country code, e.g. +91 99997 94546. Leave empty to hide the button.'},
     {key:'clients_more', label:'“More clients” tile', type:'text', help:'e.g. “80+”. Leave empty to hide the tile.'},
     {key:'instagram_url', label:'Instagram URL', type:'url'},
     {key:'linkedin_url', label:'LinkedIn URL', type:'url'},

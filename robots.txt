@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin/
+Disallow: /employeeworkspace/
+Disallow: /api/
+
+Sitemap: https://intellitaxadvisors.com/sitemap.xml

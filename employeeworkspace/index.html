@@ -1287,6 +1287,19 @@ function holidayStrip(list) {
     <div class="flex-1 min-w-0 text-sm"><span class="text-violet-700 font-semibold">${days === 0 ? 'Today is a holiday' : 'Next holiday'}:</span> <b class="text-slate-900">${esc(h.name)}</b> <span class="text-slate-500">· ${d.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}${days > 0 ? ` · in ${days} day${days > 1 ? 's' : ''}` : ''}</span>${list.length > 1 ? `<span class="hidden md:inline text-slate-400"> · then ${list.slice(1, 3).map(x => esc(x.name)).join(', ')}</span>` : ''}</div>
     <span class="text-sm font-semibold text-violet-700 hidden sm:inline">All holidays →</span></a>`;
 }
+function alertStrips(d) {
+  let out = '';
+  if (d.leave_pending) out += `<a href="#/attendance/leave" class="card card-hover flex items-center gap-3 px-4 py-3 mb-4 !border-amber-200 !bg-gradient-to-r from-amber-50 to-white">
+    <span class="kpi-ico bg-white text-amber-600 shadow-sm">${ic('calendar')}</span>
+    <div class="flex-1 text-sm"><b class="text-slate-900">${d.leave_pending} leave request${d.leave_pending > 1 ? 's' : ''}</b> <span class="text-slate-500">waiting for your approval</span></div>
+    <span class="text-sm font-semibold text-amber-700">Review →</span></a>`;
+  const docs = d.docs_expiring || [];
+  if (docs.length) out += `<div class="card px-4 py-3 mb-6 !border-rose-200 !bg-gradient-to-r from-rose-50 to-white">
+    <div class="flex items-center gap-3 mb-2"><span class="kpi-ico bg-white text-rose-600 shadow-sm">${ic('alert')}</span><b class="text-sm text-slate-900">Client documents expiring soon</b></div>
+    <div class="grid sm:grid-cols-2 gap-x-6 gap-y-1">${docs.slice(0, 6).map(x => { const left = daysFrom(x.expires_on); return `<a href="#/clients/${x.client_id}" class="flex items-center gap-2 text-sm py-1 hover:text-indigo-600"><span class="w-2 h-2 rounded-full shrink-0" style="background:${esc(x.client_color)}"></span><span class="truncate flex-1">${esc(x.client_name)} · ${esc(x.title)}</span><span class="text-xs font-semibold ${left < 0 ? 'text-red-600' : left <= 7 ? 'text-orange-600' : 'text-slate-500'}">${left < 0 ? 'expired' : left === 0 ? 'today' : 'in ' + left + 'd'}</span></a>`; }).join('')}</div></div>`;
+  return out;
+}
+const daysFrom = day => Math.round((new Date(day + 'T00:00:00') - new Date(todayISO() + 'T00:00:00')) / 864e5);
 function greeting() { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; }
 function heroBanner(title, sub, actions) {
   return `<div class="relative overflow-hidden rounded-3xl login-hero text-white p-6 sm:p-7 mb-6 shadow-xl shadow-indigo-900/10">
@@ -1320,6 +1333,7 @@ async function pageDashboard() {
     <div class="flex-1 min-w-[200px] text-sm"><b class="text-slate-900">Manage WorkDesk from your phone</b> <span class="text-slate-500">— give tasks, check work and get instant alerts while travelling.</span></div>
     <a href="#/settings" class="btn btn-primary btn-sm">Set up</a><button onclick="try{localStorage.setItem('wd-phone-hide',1)}catch(e){};this.parentElement.remove()" class="icon-btn" title="Hide">${ic('x')}</button></div>` : ''}
   ${holidayStrip(d.holidays)}
+  ${alertStrips(d)}
   ${complianceStrip(d.compliance, d.compliance_overdue)}
   ${sectionHead(`Team right now <span class="inline-flex align-middle ml-1.5 w-2 h-2 rounded-full bg-emerald-500 pulse-dot text-emerald-500"></span>`, 'Updates by itself every few seconds', `<a href="#/team" class="text-sm font-semibold text-indigo-600 hover:text-indigo-700">See everyone →</a>`)}
   <div class="grid sm:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">${liveTeam(d.team)}</div>
@@ -1542,11 +1556,46 @@ function clientFeesSection(c) {
   </div>`;
 }
 
+async function renderClientDocs(cid) {
+  const el = $('#client-docs'); if (!el) return;
+  const d = await api('/employeeworkspace/api/clients/' + cid + '/documents');
+  S.docCats = d.categories; S.docs = Object.fromEntries(d.items.map(x => [x.id, x]));
+  const exp = x => { if (!x.expires_on) return '<span class="text-slate-400">—</span>'; const l = daysFrom(x.expires_on);
+    return `<span class="${l < 0 ? 'text-red-600 font-semibold' : l <= 30 ? 'text-orange-600 font-semibold' : ''}">${fdate(x.expires_on)}${l < 0 ? ' · expired' : l <= 30 ? ` · ${l}d` : ''}</span>`; };
+  el.innerHTML = `<div class="flex items-center justify-between mb-3"><h3 class="section-title">Documents</h3><button onclick="docForm(${cid})" class="btn btn-ghost btn-sm">${ic('plus')} Upload</button></div>
+    ${d.items.length ? `<div class="card overflow-x-auto"><table class="tbl"><thead><tr><th>Document</th><th>Type</th><th>Expires</th><th>Added</th><th></th></tr></thead><tbody>
+    ${d.items.map(x => `<tr><td><a href="/employeeworkspace/client-docs/${esc(x.file)}" target="_blank" class="font-medium text-indigo-700 hover:underline">${esc(x.title)}</a><div class="text-xs text-slate-500">${esc(x.file_name || '')} · ${fmtBytes(x.size)}${x.notes ? ' · ' + esc(x.notes) : ''}</div></td>
+      <td>${esc(x.category)}</td><td class="whitespace-nowrap">${exp(x)}</td><td class="text-xs text-slate-500 whitespace-nowrap">${fdate(x.created_at)}${x.uploaded_by_name ? '<br>' + esc(x.uploaded_by_name) : ''}</td>
+      <td class="whitespace-nowrap text-right"><a href="/employeeworkspace/client-docs/${esc(x.file)}?download=1" class="icon-btn" title="Download">${ic('download')}</a><button onclick="docForm(${cid}, S.docs[${x.id}])" class="icon-btn" title="Edit">${ic('edit')}</button><button onclick="deleteDoc(${x.id}, ${cid})" class="icon-btn hover:!text-red-600" title="Delete">${ic('trash')}</button></td></tr>`).join('')}
+    </tbody></table></div>` : `<div class="card p-5">${empty('No documents yet — upload PAN, GST certificate, DSC, returns, notices…')}</div>`}`;
+}
+function docForm(cid, x = {}) {
+  const isNew = !x.id;
+  openForm({ title: isNew ? 'Upload a document' : 'Edit document', icon: 'folder', submit: isNew ? 'Upload' : 'Save',
+    values: { category: 'Other', ...x },
+    fields: [...(isNew ? [{ name: 'file', label: 'File', type: 'file', accept: '.pdf,image/*,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip', hint: 'PDF, photo, Word or Excel · up to 4 MB' }] : []),
+      { name: 'title', label: 'Name', placeholder: 'e.g. PAN card — company' }, { name: 'category', label: 'Type', type: 'select', half: true, options: (S.docCats || []).map(c => [c, c]) },
+      { name: 'expires_on', label: 'Expires on', type: 'date', half: true, help: 'optional — you get a reminder' }, { name: 'notes', label: 'Notes', help: 'optional' }],
+    onSubmit: async v => {
+      if (isNew) {
+        if (!v.file || !v.file.size) throw new Error('Choose a file to upload');
+        if (v.file.size > 4 * 1024 * 1024) throw new Error('That file is larger than 4 MB');
+        const fd = new FormData(); Object.entries(v).forEach(([k, val]) => fd.append(k, val ?? ''));
+        await api('/employeeworkspace/api/clients/' + cid + '/documents', { method: 'POST', body: fd }); toast('Document uploaded');
+      } else { await api('/employeeworkspace/api/documents/' + x.id, { method: 'PUT', json: v }); toast('Saved'); }
+      renderClientDocs(cid);
+    } });
+}
+function deleteDoc(id, cid) {
+  openForm({ title: 'Delete this document?', danger: true, submit: 'Delete', intro: `<p class="text-sm text-slate-600 mb-3">${esc(S.docs[id]?.title || '')} will be removed for everyone.</p>`, fields: [],
+    onSubmit: async () => { await api('/employeeworkspace/api/documents/' + id, { method: 'DELETE' }); toast('Deleted'); renderClientDocs(cid); } });
+}
 async function pageClient(id) {
   const [c, tasks, exps, logs] = await Promise.all([api('/employeeworkspace/api/clients/' + id), api('/employeeworkspace/api/tasks?client_id=' + id), api('/employeeworkspace/api/expenses?client_id=' + id), api('/employeeworkspace/api/timelogs?client_id=' + id)]);
   setTitle(c.name, 'Client' + (c.contact_person ? ' · ' + c.contact_person : ''));
   const total = c.labour_cost + c.expenses;
   S.cur = c;
+  setTimeout(() => renderClientDocs(id), 0);
   $('#view').innerHTML = `
   <a href="#/clients" class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900">${ic('back')} All clients</a>
   <div class="flex flex-wrap items-center gap-3 mt-2 mb-5">
@@ -1564,6 +1613,7 @@ async function pageClient(id) {
     ${kpi('Total cost', money(total), 'all time')}
   </div>
   ${clientFeesSection(c)}
+  <div id="client-docs" class="mb-8"></div>
   <h3 class="section-title mb-3">Projects</h3>
   ${projectTable(c.projects, true)}
   <div class="grid lg:grid-cols-2 gap-4 my-6">
@@ -1655,7 +1705,8 @@ function employeeForm(e = {}) {
       { name: 'role', label: 'What can they see?', type: 'select', half: true, options: roles },
       { name: 'designation_other', label: 'Job title (other)', placeholder: 'Type the job title' },
       { name: 'email', label: 'Email', type: 'email', half: true }, { name: 'phone', label: 'Phone', half: true },
-      { name: 'hourly_cost', label: `Cost per hour (${cur()})`, type: 'number', min: 0, half: true, placeholder: 'e.g. 400', help: 'monthly salary ÷ ~200' },
+      ...(S.perm?.hide_money ? [] : [{ name: 'monthly_salary', label: `Monthly salary (${cur()})`, type: 'number', min: 0, half: true, placeholder: 'e.g. 30000', help: 'for the salary sheet' },
+      { name: 'hourly_cost', label: `Cost per hour (${cur()})`, type: 'number', min: 0, half: true, placeholder: 'e.g. 400', help: 'monthly salary ÷ ~200' }]),
       { name: 'pin', label: isNew ? 'Sign-in PIN' : 'New PIN', help: isNew ? '4+ digits' : 'leave blank to keep', type: 'password', required: isNew, half: true, inputmode: 'numeric', placeholder: '4+ digits' },
       { name: 'color', label: 'Colour', type: 'color', half: true },
       ...(isNew ? [] : [{ name: 'active', type: 'checkbox', hint: 'Active — can sign in and receive tasks' }]), ...accessFields],
@@ -2059,11 +2110,14 @@ async function pageAttendance(tab) {
   setTitle('Attendance');
   S.f.att = S.f.att || { month: todayISO().slice(0, 7) };
   tab = tab || (S.isMgr ? 'today' : 'me');
-  const tabs = S.isMgr ? [['today', 'Today'], ['register', 'Monthly register'], ['me', 'My attendance'], ['holidays', 'Holidays']] : [['me', 'My attendance'], ['holidays', 'Holidays']];
+  const tabs = S.isMgr ? [['today', 'Today'], ['register', 'Monthly register'], ['leave', 'Leave requests'], ...(S.perm?.hide_money ? [] : [['salary', 'Salary sheet']]), ['me', 'My attendance'], ['holidays', 'Holidays']]
+    : [['me', 'My attendance'], ['leave', 'My leave'], ['holidays', 'Holidays']];
   const bar = `<div class="seg mb-6">${tabs.map(([k, l]) => `<button onclick="location.hash='#/attendance/${k}'" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   if (tab === 'today' && S.isMgr) return attToday(bar);
   if (tab === 'register' && S.isMgr) return attRegister(bar);
   if (tab === 'holidays') return attHolidays(bar);
+  if (tab === 'leave') return attLeave(bar);
+  if (tab === 'salary' && S.isMgr && !S.perm?.hide_money) return attSalary(bar);
   return attMe(bar);
 }
 function monthNav(onchangeJs) {
@@ -2096,7 +2150,7 @@ async function attMe(bar) {
     const firstDow = (new Date(m.days[0].day + 'T00:00:00').getDay() + 6) % 7;
     return Array(firstDow).fill('<div></div>').join('') + m.days.map(d => {
       const st = ATT[d.status], n = +d.day.slice(8), canLeave = d.day >= today && ['upcoming', 'not_in', 'leave', 'half'].includes(d.status);
-      return `<div ${canLeave ? `onclick="leaveForm('${d.day}', '${d.leave ? d.leave.kind : ''}')" title="Mark or change leave"` : `title="${esc(st[0] + (d.holiday ? ' · ' + d.holiday : ''))}"`}
+      return `<div ${canLeave ? (d.leave ? `onclick="location.hash='#/attendance/leave'" title="See or cancel this leave"` : `onclick="leaveForm('${d.day}')" title="Request leave for this day"`) : `title="${esc(st[0] + (d.holiday ? ' · ' + d.holiday : ''))}"`}
         class="rounded-xl p-1.5 sm:p-2 min-h-[58px] sm:min-h-[76px] flex flex-col ${st[1]} ${d.day === today ? 'ring-2 ring-offset-2 ring-indigo-500' : ''} ${canLeave ? 'cursor-pointer hover:brightness-95' : ''}">
         <div class="text-xs sm:text-sm font-bold">${n}</div>
         <div class="mt-auto text-[10px] sm:text-[11px] leading-tight font-medium truncate">${d.holiday ? esc(d.holiday) : d.status === 'leave' ? 'Leave' : d.status === 'half' ? 'Half day' : d.first_in ? hm12(d.first_in) + (d.minutes ? `<span class="hidden sm:inline opacity-80"> · ${hm(d.minutes)}</span>` : '') : d.status === 'absent' ? 'Absent' : ''}${d.missed_out ? ' ⚠︎' : ''}</div></div>`;
@@ -2122,7 +2176,7 @@ async function attMe(bar) {
   </div>
   <div class="grid lg:grid-cols-[1fr_320px] gap-4">
     <div class="card p-5">
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">${monthNav()}<button onclick="leaveForm()" class="btn btn-ghost btn-sm">${ic('calendar')} Mark leave</button></div>
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">${monthNav()}<button onclick="leaveForm()" class="btn btn-ghost btn-sm">${ic('calendar')} Request leave</button></div>
       <div class="grid grid-cols-7 gap-1.5 sm:gap-2 mb-2 text-center text-[11px] font-bold uppercase tracking-wider text-slate-400">${['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<div>${d}</div>`).join('')}</div>
       <div class="grid grid-cols-7 gap-1.5 sm:gap-2">${cells}</div>
       <div class="mt-4 pt-4 border-t border-[var(--line)]">${legend()}${s.missed_out ? `<div class="text-xs text-orange-600 mt-2">⚠︎ ${s.missed_out} day(s) you forgot to punch out — ask your manager to fix the time.</div>` : ''}</div>
@@ -2139,15 +2193,78 @@ function holidayRow(h) {
     <div class="flex-1 min-w-0"><div class="font-semibold text-slate-900 truncate">${esc(h.name)}</div><div class="text-xs text-slate-500">${d.toLocaleDateString('en-IN', { weekday: 'long' })}${days >= 0 ? ` · ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : 'in ' + days + ' days'}` : ''}</div></div>
     ${S.isMgr && h.id ? `<button onclick="deleteHoliday(${h.id}, '${esc(h.name).replace(/'/g, "\\'")}')" class="icon-btn hover:!text-red-600" title="Remove">${ic('trash')}</button>` : ''}</div>`;
 }
-function leaveForm(day, current) {
+async function leaveForm(day) {
+  const L = await api('/employeeworkspace/api/leave-requests?mine=1');
+  const bal = Object.fromEntries(L.mine.map(b => [b.type, b]));
+  const label = t => L.types[t] + (bal[t] && bal[t].left != null ? ` — ${Math.max(bal[t].left - bal[t].pending, 0)} left` : '');
   openForm({
-    title: 'Mark leave', icon: 'calendar', sub: S.isMgr ? '' : 'Your manager will be notified.', submit: 'Save',
-    values: { day: day || todayISO(), kind: current || 'full' },
-    fields: [{ name: 'day', label: 'Date', type: 'date', required: true, half: true },
-      { name: 'kind', label: 'Type', type: 'select', half: true, options: [['full', 'Full day leave'], ['half', 'Half day leave'], ...(current ? [['none', 'Cancel leave']] : [])] },
-      { name: 'note', label: 'Reason', help: 'optional', placeholder: 'e.g. Family function' }],
-    onSubmit: async v => { await api('/employeeworkspace/api/attendance/leave', { json: v }); toast(v.kind === 'none' ? 'Leave cancelled' : 'Leave marked'); await afterChange(); }
+    title: 'Request leave', icon: 'calendar', sub: S.isMgr ? 'Recorded straight away.' : 'Your manager approves it; you\'ll get a notification.', submit: S.isMgr ? 'Save leave' : 'Send request',
+    values: { from_day: day || todayISO(), to_day: day || todayISO(), kind: 'full', leave_type: 'CL' },
+    fields: [{ name: 'from_day', label: 'From', type: 'date', required: true, half: true }, { name: 'to_day', label: 'To', type: 'date', half: true, help: 'same day for one day' },
+      { name: 'leave_type', label: 'Type of leave', type: 'select', half: true, options: Object.keys(L.types).map(t => [t, label(t)]) },
+      { name: 'kind', label: 'Full or half day', type: 'select', half: true, options: [['full', 'Full day(s)'], ['half', 'Half day (one date only)']] },
+      { name: 'reason', label: 'Reason', help: 'optional', placeholder: 'e.g. Family function' }],
+    onSubmit: async v => {
+      const r = await api('/employeeworkspace/api/leave-requests', { json: v });
+      toast(r.status === 'approved' ? 'Leave saved' : 'Leave request sent'); location.hash = '#/attendance/leave'; await afterChange();
+    }
   });
+}
+const LEAVE_PILL = { pending: ['Waiting', 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'], approved: ['Approved', 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'],
+  rejected: ['Rejected', 'bg-red-50 text-red-700 ring-1 ring-red-200'], cancelled: ['Cancelled', 'bg-slate-100 text-slate-500'] };
+const leaveDates = r => { const f = d => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); return r.from_day === r.to_day ? f(r.from_day) : `${f(r.from_day)} – ${f(r.to_day)}`; };
+function balanceCards(list) {
+  return `<div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">${list.map(b => kpi(b.label, b.left != null ? `${b.left}<span class="text-lg text-slate-400 font-bold">/${b.quota}</span>` : b.used,
+    b.left != null ? `${b.used} used${b.pending ? ` · ${b.pending} waiting` : ''} this year` : 'days taken this year', b.left != null && b.left <= 2 ? 'text-orange-500' : '')).join('')}</div>`;
+}
+function leaveRow(r, mgrView) {
+  const [pl, pc] = LEAVE_PILL[r.status] || ['', ''];
+  const mine = r.employee_id === S.me.id, future = r.from_day >= todayISO();
+  const acts = [];
+  if (mgrView && r.status === 'pending' && !S.perm?.view_only && (!mine || S.me.role === 'admin')) acts.push(`<button onclick="decideLeave(${r.id}, 'approve')" class="btn btn-sm bg-emerald-600 text-white hover:bg-emerald-500">Approve</button>`, `<button onclick="decideLeave(${r.id}, 'reject')" class="btn btn-ghost btn-sm">Reject</button>`);
+  if ((r.status === 'pending' || (r.status === 'approved' && (future || S.isMgr))) && (mine || S.isMgr)) acts.push(`<button onclick="decideLeave(${r.id}, 'cancel')" class="btn btn-ghost btn-sm">Cancel</button>`);
+  return `<div class="flex flex-wrap items-center gap-3 py-3 border-b border-[var(--line)] last:border-0">
+    ${mgrView ? avatar(r.employee_name, r.employee_color, 9) : ''}
+    <div class="flex-1 min-w-[180px]"><div class="text-sm"><b class="text-slate-900">${mgrView ? esc(r.employee_name) + ' · ' : ''}${esc(leaveDates(r))}</b> <span class="text-slate-500">· ${r.days} day${r.days === 1 ? '' : 's'} ${esc(r.leave_type)}${r.kind === 'half' ? ' (half day)' : ''}</span></div>
+      <div class="text-xs text-slate-500 mt-0.5">${r.reason ? esc(r.reason) : 'No reason given'}${r.decided_by_name && r.status !== 'pending' ? ` · ${r.status} by ${esc(r.decided_by_name)}${r.decision_note ? ': ' + esc(r.decision_note) : ''}` : ''}</div></div>
+    ${pill(pl, pc)}<div class="flex gap-2">${acts.join('')}</div></div>`;
+}
+async function attLeave(bar) {
+  const d = await api('/employeeworkspace/api/leave-requests');
+  const mgrView = !!d.balances, pending = d.items.filter(r => r.status === 'pending');
+  const mine = mgrView ? d.items.filter(r => r.employee_id === S.me.id) : d.items;
+  $('#view').innerHTML = bar + `
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-4"><h3 class="section-title">My leave balance · ${todayISO().slice(0, 4)}</h3><button onclick="leaveForm()" class="btn btn-primary">${ic('plus')} Request leave</button></div>
+  ${balanceCards(d.mine)}
+  ${mgrView ? `<div class="card p-5 mb-6">${sectionHead(`Waiting for approval${pending.length ? ` (${pending.length})` : ''}`, 'Approved leave goes onto the attendance calendar automatically')}
+    ${pending.length ? pending.map(r => leaveRow(r, true)).join('') : empty('No leave requests waiting')}</div>` : ''}
+  <div class="card p-5 mb-6">${sectionHead(mgrView ? 'All requests' : 'My requests', '')}
+    ${(mgrView ? d.items.filter(r => r.status !== 'pending') : mine).map(r => leaveRow(r, mgrView)).join('') || empty('No leave requests yet')}</div>
+  ${mgrView ? `<div class="card p-5 overflow-x-auto">${sectionHead('Team leave balances', `Casual ${d.quotas.CL} · Sick ${d.quotas.SL} · Earned ${d.quotas.EL} days a year — change in Settings`)}
+    <table class="tbl"><thead><tr><th>Person</th>${d.balances[0]?.balances.map(b => `<th class="num">${esc(b.type)}</th>`).join('') || ''}</tr></thead><tbody>
+    ${d.balances.map(p => `<tr><td><div class="flex items-center gap-2">${avatar(p.name, p.color, 7)}${esc(p.name)}</div></td>${p.balances.map(b => `<td class="num">${b.left != null ? `<b>${b.left}</b><span class="text-slate-400">/${b.quota}</span>` : `<b>${b.used}</b><span class="text-slate-400"> taken</span>`}${b.pending ? `<div class="text-[11px] text-amber-700">${b.pending} waiting</div>` : ''}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>` : ''}`;
+}
+async function decideLeave(id, action) {
+  const verb = { approve: 'Approve', reject: 'Reject', cancel: 'Cancel' }[action];
+  openForm({ title: verb + ' this leave?', icon: 'calendar', submit: verb, danger: action !== 'approve',
+    fields: [{ name: 'note', label: action === 'reject' ? 'Reason (shown to them)' : 'Note', help: 'optional' }],
+    onSubmit: async v => { await api('/employeeworkspace/api/leave-requests/' + id, { method: 'PUT', json: { action, note: v.note } }); toast('Leave ' + { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }[action]); await afterChange(); } });
+}
+async function attSalary(bar) {
+  const d = await api('/employeeworkspace/api/attendance/salary?' + qs({ month: S.f.att.month }));
+  const f = n => Number.isInteger(n) ? n : n.toFixed(1);
+  $('#view').innerHTML = bar + `
+  <div class="card p-5 overflow-x-auto">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">${monthNav()}<a href="/employeeworkspace/api/export/salary.xlsx?month=${d.month}" class="btn btn-ghost btn-sm">${ic('download')} Download Excel</a></div>
+    ${d.partial ? `<div class="text-xs text-amber-800 bg-amber-50 rounded-xl p-3 mb-4">This month isn't over yet — days still ahead are counted as paid. Check again after month-end.</div>` : ''}
+    <table class="tbl"><thead><tr><th>Person</th><th class="num">Present</th><th class="num">Late</th><th class="num">Paid leave</th><th class="num">Unpaid (LOP)</th><th class="num">Absent</th><th class="num">Paid days</th><th class="num">Monthly salary</th><th class="num">Payable</th></tr></thead><tbody>
+    ${d.rows.map(r => `<tr><td><div class="font-medium">${esc(r.name)}</div><div class="text-xs text-slate-500">${esc(r.designation || '')}</div></td>
+      <td class="num">${f(r.present)}</td><td class="num">${r.late}</td><td class="num">${f(r.paid_leave)}</td><td class="num ${r.lop ? 'text-orange-600 font-semibold' : ''}">${f(r.lop)}</td><td class="num ${r.absent ? 'text-red-600 font-semibold' : ''}">${r.absent}</td>
+      <td class="num">${f(r.paid_days)}<span class="text-slate-400">/${r.days_in_month}</span></td><td class="num">${r.monthly_salary ? money(r.monthly_salary) : `<button onclick="employeeForm(S.meta.employees.find(e => e.id === ${r.id}))" class="text-xs font-semibold text-indigo-600">Add salary</button>`}</td><td class="num font-semibold">${r.monthly_salary ? money(r.payable) : '—'}</td></tr>`).join('')}
+    <tr class="font-bold"><td>Total</td><td colspan="7"></td><td class="num">${money(d.total)}</td></tr></tbody></table>
+    <p class="text-xs text-slate-500 mt-4">Paid days = days in the month − absent days − unpaid leave (LOP). Weekends, office holidays and paid leave (CL / SL / EL) are paid. Payable = monthly salary × paid days ÷ days in the month.</p>
+  </div>`;
 }
 
 async function attToday(bar) {
@@ -2204,10 +2321,11 @@ async function attEditForm(eid, day) {
   openForm({
     title: `${esc(person.name || '')} · ${new Date(day + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}`, icon: 'calendar',
     sub: `Currently: ${ATT[d.status][0] || 'no record'}${d.holiday ? ' · ' + esc(d.holiday) : ''}${d.sessions > 1 ? ` · ${d.sessions} punches (saving replaces them with one)` : ''}${d.missed_out ? ' · forgot to punch out' : ''}`,
-    submit: 'Save', values: { in_time: d.first_in || '', out_time: d.last_out || '', leave: d.leave ? d.leave.kind : 'none', note: d.leave?.note || '' },
+    submit: 'Save', values: { in_time: d.first_in || '', out_time: d.last_out || '', leave: d.leave ? d.leave.kind : 'none', leave_type: d.leave?.leave_type === 'LOP' ? 'LOP' : 'paid', note: d.leave?.note || '' },
     fields: [{ name: 'in_time', label: 'In time', type: 'time', half: true }, { name: 'out_time', label: 'Out time', type: 'time', half: true, help: 'optional' },
       { name: 'leave', label: 'Leave', type: 'select', half: true, options: [['none', 'No leave'], ['full', 'Full day leave'], ['half', 'Half day leave']] },
-      { name: 'note', label: 'Note', half: true, help: 'optional' },
+      { name: 'leave_type', label: 'Paid?', type: 'select', half: true, options: [['paid', 'Paid leave'], ['LOP', 'Unpaid (LOP)']] },
+      { name: 'note', label: 'Note', help: 'optional' },
       { name: 'clear_times', type: 'checkbox', hint: 'Remove punch times for this day (mark as not present)' }],
     onSubmit: async v => {
       if (v.clear_times) { v.in_time = ''; v.out_time = ''; }
@@ -2593,6 +2711,8 @@ async function pageSettings() {
       <div class="col-span-2 sm:col-span-1"><label class="block text-xs font-semibold text-slate-600 mb-1">Office / firm name</label><input name="company" class="field" value="${esc(s.company || '')}"></div>
       <div class="col-span-2 sm:col-span-1"><label class="block text-xs font-semibold text-slate-600 mb-1">Currency symbol</label><input name="currency" class="field" value="${esc(s.currency || '₹')}"></div>
       <div class="col-span-2 sm:col-span-1"><label class="block text-xs font-semibold text-slate-600 mb-1">Office start time <span class="font-normal text-slate-400">· punch-in after this counts as late</span></label><input name="office_start" type="time" class="field" value="${esc(s.office_start || '10:00')}"></div>
+      <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Leave allowed per person each year <span class="font-normal text-slate-400">· January–December</span></label>
+        <div class="grid grid-cols-3 gap-3">${[['CL', 'Casual'], ['SL', 'Sick'], ['EL', 'Earned']].map(([t, l]) => `<label class="text-xs text-slate-500">${l}<input name="leave_quota_${t}" type="number" min="0" max="365" step="0.5" class="field mt-1" value="${esc(s['leave_quota_' + t] ?? '')}"></label>`).join('')}</div></div>
       <div class="col-span-2"><button class="btn btn-primary">Save</button></div></form></div>` : ''}
     <div class="card p-5"><div class="flex items-center gap-3"><span class="kpi-ico bg-indigo-50 text-indigo-600">${ic('moon')}</span><div class="flex-1"><h3 class="font-bold text-slate-900">Appearance</h3><p class="text-sm text-slate-500">Saved on this device only.</p></div>
       <div class="seg">${[['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['auto', 'Auto', 'zap']].map(([k, l, i]) => `<button data-theme-opt="${k}" onclick="setTheme('${k}')" class="${themePref() === k ? 'on' : ''}">${ic(i, 'w-3.5 h-3.5')}${l}</button>`).join('')}</div></div>
