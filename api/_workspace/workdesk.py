@@ -2935,7 +2935,11 @@ def extract_invoice(text):
         result["gstin"] = g_.group(1)
     inv = re.search(r"(?:invoice|inv|bill|receipt|order)\s*(?:no|number|#|num)\.?\s*[:#-]?\s*([A-Z0-9][A-Z0-9/\-]{2,})", text, re.I)
     if inv:
-        result["invoice_no"] = inv.group(1)
+        no = inv.group(1)
+        if no[-1] in "-/":   # photos often read "CCD-88214" as "CCD- 88214"
+            nxt = re.match(r"\s*([A-Z0-9][A-Z0-9/\-]*)", text[inv.end():], re.I)
+            no += nxt.group(1) if nxt else ""
+        result["invoice_no"] = no.rstrip("-/")
     # --- vendor: first meaningful line near the top
     skip = ("tax invoice", "invoice", "receipt", "bill of supply", "original", "duplicate", "gstin", "cash memo", "thanks", "thank you", "welcome", "estimate")
     for l in lines[:6]:

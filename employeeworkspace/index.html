@@ -297,6 +297,8 @@ const ICONS = {
   settings: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3.5"/>',
+  phone: '<rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/>',
   play: '<path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5z" fill="currentColor" stroke="none"/>',
   stop: '<rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor" stroke="none"/>',
   calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
@@ -619,6 +621,19 @@ function renderTabbar() {
       ? `<button onclick="toggleSidebar(true)" class="flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10.5px] font-semibold">${ic(it[2], 'w-[22px] h-[22px]')}${it[1]}</button>`
       : `<a href="#/${it[0]}" class="relative flex flex-col items-center gap-0.5 pt-2 pb-1.5 text-[10.5px] font-semibold ${page === it[0] ? 'on' : ''}">${ic(it[2], 'w-[22px] h-[22px]')}${it[1]}${it[0] === 'chat' ? '<span data-badge="chat" class="hidden absolute top-1 left-1/2 ml-2 min-w-[18px] h-[18px] px-1 rounded-full bg-emerald-500 text-white text-[10px] font-bold items-center justify-center"></span>' : ''}</a>`).join('');
 }
+let installEvt = null;
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (S.me) buildNav(); });
+window.addEventListener('appinstalled', () => { installEvt = null; if (S.me) buildNav(); toast('WorkDesk is installed — open it from your home screen'); });
+async function installApp() {
+  if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; buildNav(); return; }
+  const ios = isIOS();
+  openForm({ title: 'Install WorkDesk on this phone', icon: 'phone', submit: 'Got it', fields: [],
+    intro: `<div class="space-y-3 text-sm text-slate-600 mb-2">${ios
+      ? `<p>1. Open <b>intellitaxadvisors.com/employeeworkspace</b> in <b>Safari</b>.</p><p>2. Tap the <b>Share</b> button (square with an arrow), then <b>Add to Home Screen</b>.</p><p>3. Open WorkDesk from the new icon and sign in. Then turn on notifications in Settings.</p>`
+      : `<p>1. Open <b>intellitaxadvisors.com/employeeworkspace</b> in <b>Chrome</b>.</p><p>2. Tap <b>⋮</b> (top right), then <b>Install app</b> or <b>Add to Home screen</b>.</p><p>3. Open WorkDesk from the new icon and sign in. Then turn on notifications in Settings.</p>`}
+      <p class="text-xs text-slate-400">It works anywhere with internet — office, home or travelling — and opens full-screen like any other app.</p></div>`,
+    onSubmit: async () => {} });
+}
 const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -691,7 +706,8 @@ function buildNav() {
     const head = group !== last ? `<div class="nav-group">${group}</div>` : '';
     last = group;
     return head + `<a href="#/${k}" data-nav="${k}" onclick="toggleSidebar(false)" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic(icon, 'w-[18px] h-[18px]')}<span class="flex-1">${label}</span>${k === 'chat' ? '<span data-badge="chat" class="hidden min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold items-center justify-center"></span>' : ''}${k === 'suggestions' ? '<span data-badge="sug" class="hidden min-w-[20px] h-5 px-1.5 rounded-full bg-amber-400 text-amber-950 text-[11px] font-bold items-center justify-center"></span>' : ''}</a>`;
-  }).join('') + (canSee('expenseflow') ? '' : '<!--') + `<a href="/employeeworkspace/expenses/" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic('wallet', 'w-[18px] h-[18px]')}<span class="flex-1">ExpenseFlow</span><span class="text-xs opacity-60">↗</span></a>` + (canSee('expenseflow') ? '' : '-->');
+  }).join('') + (canSee('expenseflow') ? '' : '<!--') + `<a href="/employeeworkspace/expenses/" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic('wallet', 'w-[18px] h-[18px]')}<span class="flex-1">ExpenseFlow</span><span class="text-xs opacity-60">↗</span></a>` + (canSee('expenseflow') ? '' : '-->')
+    + (isStandalone() ? '' : `<button onclick="toggleSidebar(false);installApp()" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 mt-2 text-left">${ic('phone', 'w-[18px] h-[18px]')}<span class="flex-1">Install app</span>${installEvt ? '<span class="text-[10px] font-bold bg-emerald-500 text-white rounded-full px-2 py-0.5">1 tap</span>' : ''}</button>`);
 }
 function toggleSidebar(open) {
   $('#sidebar').classList.toggle('-translate-x-full', !open);
@@ -788,10 +804,14 @@ function scanDialog(files) {
     <div class="flex items-start gap-3 mb-5"><div class="kpi-ico bg-emerald-50 text-emerald-600">${ic('scan', 'w-5 h-5')}</div>
       <div class="flex-1"><h3 class="text-lg font-extrabold tracking-tight text-slate-900">Scan invoices</h3><p class="text-sm text-slate-500">WorkDesk reads each invoice in your browser, then keeps it in the office's private storage.</p></div>
       <button onclick="closeModal()" class="icon-btn">${ic('x')}</button></div>
-    <div id="scan-body"><label ondragover="event.preventDefault()" ondrop="event.preventDefault();scanUpload([...event.dataTransfer.files])"
+    <div id="scan-body">
+      <label class="btn btn-go w-full justify-center !py-4 !text-[15px] !rounded-2xl mb-3 cursor-pointer">${ic('camera', 'w-5 h-5')} Take a photo of an invoice
+        <input type="file" accept="image/*" capture="environment" class="hidden" onchange="scanUpload([...this.files])"></label>
+      <p class="text-xs text-slate-500 text-center mb-4">Lay the bill flat, fill the frame, avoid shadows. You can take more after checking this one.</p>
+      <label ondragover="event.preventDefault()" ondrop="event.preventDefault();scanUpload([...event.dataTransfer.files])"
       class="flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 px-6 py-12 cursor-pointer hover:border-emerald-300 hover:bg-emerald-50/40 transition text-center">
       <span class="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">${ic('scan', 'w-7 h-7')}</span>
-      <span class="font-bold text-slate-900">Drop invoices here, or tap to choose</span>
+      <span class="font-bold text-slate-900">Or drop invoices here / choose files</span>
       <span class="text-sm text-slate-500">PDF, JPG, PNG or iPhone photos · up to 20 at once</span>
       <input type="file" multiple accept=".pdf,image/*,.heic,.heif" class="hidden" onchange="scanUpload([...this.files])"></label></div>
   </div>`;
@@ -835,8 +855,27 @@ async function readInvoiceText(f) {
       }
       return text;
     }
-    return (await (await ocrWorker()).recognize(f)).data.text;
+    const w = await ocrWorker();
+    let img = f;
+    try { img = await prepForOcr(f); } catch (e) {}
+    return (await w.recognize(img)).data.text;
   } catch (e) { return ''; }
+}
+async function prepForOcr(f) {
+  const bmp = await createImageBitmap(f, { imageOrientation: 'from-image' });
+  const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height)) * (Math.max(bmp.width, bmp.height) < 1000 ? 2 : 1);
+  const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+  const cx = cv.getContext('2d', { willReadFrequently: true }); cx.drawImage(bmp, 0, 0, cv.width, cv.height);
+  const im = cx.getImageData(0, 0, cv.width, cv.height), d = im.data, hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i += 4) { const y = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000 | 0; d[i] = y; hist[y]++; }
+  // stretch between the 2nd and 98th percentile so faded thermal receipts and grey phone photos become black on white
+  const n = d.length / 4; let lo = 0, hi = 255, acc = 0;
+  for (; lo < 255 && (acc += hist[lo]) < n * 0.02; lo++);
+  acc = 0; for (; hi > 0 && (acc += hist[hi]) < n * 0.02; hi--);
+  const span = Math.max(hi - lo, 1);
+  for (let i = 0; i < d.length; i += 4) { const v = Math.max(0, Math.min(255, (d[i] - lo) * 255 / span)); d[i] = d[i + 1] = d[i + 2] = v; }
+  cx.putImageData(im, 0, 0);
+  return cv;
 }
 async function shrinkImage(f) {
   if (!f.type.startsWith('image/') || f.size < 3.5e6) return f;
