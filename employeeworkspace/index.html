@@ -460,7 +460,12 @@ async function boot() {
   try {
     const r = await api('/employeeworkspace/api/me');
     S.me = r.user; S.isMgr = r.is_manager;
-  } catch { return; }
+  } catch (e) {
+    // 401 already showed the sign-in screen; anything else means the WorkDesk server couldn't be reached
+    const b = $('#boot-loading');
+    if (b && e.message !== 'Please sign in') b.innerHTML = 'WorkDesk can’t reach its server right now. Please try again in a minute.<br><small style="display:block;margin-top:8px;color:#94a3b8">' + esc(e.message) + '</small><button onclick="location.reload()" style="margin-top:14px;padding:8px 16px;border-radius:10px;background:#4f46e5;color:#fff;font:600 14px system-ui">Try again</button>';
+    return;
+  }
   await loadMeta();
   $('#boot-loading')?.remove();
   $('#login').classList.add('hidden'); $('#app').classList.remove('hidden');

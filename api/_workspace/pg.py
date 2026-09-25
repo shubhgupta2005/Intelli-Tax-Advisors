@@ -268,3 +268,45 @@ def list_files(prefix):
         if len(batch) < 1000:
             return out
         offset += 1000
+
+
+# ── Startup: connect lazily and explain problems instead of crashing ────────
+
+def explain(e):
+    """Plain-language reason a server couldn't start (never includes secrets)."""
+    msg = str(e)
+    if "DATABASE_URL is not set" in msg:
+        return "DATABASE_URL is missing in Vercel (Settings → Environment Variables), or the site wasn't redeployed after adding it."
+    if "password authentication failed" in msg:
+        return "The database password inside DATABASE_URL is wrong."
+    if "Tenant or user not found" in msg:
+        return "DATABASE_URL doesn't match this Supabase project — copy the Transaction pooler string from Supabase → Connect."
+    if isinstance(e, psycopg.errors.UndefinedTable) or isinstance(e, psycopg.errors.InvalidSchemaName):
+        return "The workspace tables don't exist yet — run supabase/004_workspace.sql in the Supabase SQL Editor."
+    if "WorkDesk isn't set up" in msg:
+        return msg
+    if isinstance(e, psycopg.OperationalError):
+        return "Couldn't connect to the database with DATABASE_URL: " + msg.strip().splitlines()[-1][:200]
+    return "Server startup failed: " + msg[:200]
+
+
+class StartupGuard:
+    """Runs the one-time setup on the first request; until it succeeds, answers 503 with the reason."""
+
+    def __init__(self, flask_app, setup):
+        self.flask_app, self.setup, self.inner, self.ready = flask_app, setup, flask_app.wsgi_app, False
+
+    def __call__(self, environ, start_response):
+        if not self.ready:
+            try:
+                self.flask_app.secret_key = self.setup()
+                self.ready = True
+            except Exception as e:
+                _drop()
+                reason = explain(e)
+                print(f"[startup] {e!r}", flush=True)
+                body = json.dumps({"error": reason}).encode()
+                start_response("503 Service Unavailable", [("Content-Type", "application/json"),
+                                                           ("Content-Length", str(len(body))), ("Cache-Control", "no-store")])
+                return [body]
+        return self.inner(environ, start_response)

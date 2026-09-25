@@ -3098,7 +3098,7 @@ def server_error(e):
     return bad("Something went wrong on the server. Please try again.", 500)
 
 
-app.secret_key = ensure_setup()
+app.wsgi_app = pg.StartupGuard(app, ensure_setup)  # connects on the first request, not at import
 app.config.update(
     SESSION_COOKIE_NAME="wd_session", SESSION_COOKIE_PATH=BASE, SESSION_COOKIE_SAMESITE="Lax",
     SESSION_COOKIE_SECURE=os.environ.get("WORKDESK_INSECURE_COOKIES") != "1", SESSION_COOKIE_HTTPONLY=True,

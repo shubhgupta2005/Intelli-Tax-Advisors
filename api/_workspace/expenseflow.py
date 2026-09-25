@@ -86,7 +86,9 @@ def init_db():
                        (str(uuid.uuid4()), 'General', 'Default project for uncategorized expenses', '#6366f1', 10000))
         db.commit()
         r = db.execute("SELECT value FROM workdesk.settings WHERE key='secret'").fetchone()
-        return r[0] if r else None
+        if not r:
+            raise RuntimeError("WorkDesk isn't set up yet — open /employeeworkspace/ once, then reload ExpenseFlow.")
+        return r[0]
     finally:
         db.close()
 
@@ -940,7 +942,7 @@ def serve_index():
     return send_from_directory(str(FRONTEND_DIR), 'index.html')
 
 
-app.secret_key = init_db()
+app.wsgi_app = pg.StartupGuard(app, init_db)  # connects on the first request, not at import
 app.config.update(SESSION_COOKIE_NAME="wd_session", SESSION_COOKIE_PATH="/employeeworkspace",
                   SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=os.environ.get("WORKDESK_INSECURE_COOKIES") != "1",
                   SESSION_REFRESH_EACH_REQUEST=False)  # never re-issue WorkDesk's cookie from here
