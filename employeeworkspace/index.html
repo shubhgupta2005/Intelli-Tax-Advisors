@@ -91,6 +91,8 @@
   .section-title { font-size: 1rem; font-weight: 700; color:#141829; letter-spacing:-.01em; }
   .muted { color:#7a8199; }
   table.tbl { width:100%; font-size:.86rem; }
+  /* phones: tables keep one line per cell and scroll sideways inside their card, like a spreadsheet, instead of crushing columns */
+  @media (max-width: 767px) { table.tbl td { white-space: nowrap; } table.tbl td .truncate { max-width: 60vw; } }
   table.tbl th { text-align:left; font-weight:600; color:#7a8199; font-size:.7rem; text-transform:uppercase; letter-spacing:.07em; padding:.8rem 1rem; border-bottom:1px solid var(--line); background:#fafbfd; white-space:nowrap; }
   table.tbl td { padding:.8rem 1rem; border-bottom:1px solid #f0f2f7; vertical-align:middle; }
   table.tbl tr:last-child td { border-bottom:0; }
@@ -101,7 +103,8 @@
     overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none; }   /* long tab rows scroll inside themselves */
   .seg::-webkit-scrollbar { display:none; }
   .seg button { flex:none; white-space:nowrap; padding:.38rem .8rem; border-radius:.6rem; font-size:.8rem; font-weight:600; color:#5b6178; display:inline-flex; align-items:center; gap:.35rem; }
-  .grid > *, .flex > .flex-1 { min-width:0; }                               /* let columns shrink to the screen */
+  /* let columns shrink to the screen — zero-specificity, so an explicit min-w-[…] on an element still wins */
+  :where(.grid) > *, :where(.flex) > :where(.flex-1) { min-width: 0; }
   html, body { overscroll-behavior-x:none; }
   img, svg, video, canvas { max-width:100%; }
   /* Phones: 16px text in form fields, otherwise iPhone zooms in on tap and the page starts sliding sideways */
@@ -1780,7 +1783,7 @@ async function pageEmployee(id) {
   $('#view').innerHTML = `
   <a href="#/team" class="inline-flex items-center gap-1.5 text-sm font-semibold text-slate-500 hover:text-slate-900">${ic('back')} Team</a>
   <div class="flex flex-wrap items-center gap-3 mt-2 mb-5">${avatar(e.name, e.color, 12)}
-    <div class="flex-1"><h1 class="text-[26px] font-extrabold tracking-tight text-slate-900">${esc(e.name)}</h1><div class="text-sm text-slate-500">${esc(e.designation || '')} · ${ROLE_LABEL[e.role]} · ${money(e.hourly_cost)} per hour</div></div>
+    <div class="flex-1 min-w-[200px]"><h1 class="text-[26px] font-extrabold tracking-tight text-slate-900">${esc(e.name)}</h1><div class="text-sm text-slate-500">${esc(e.designation || '')} · ${ROLE_LABEL[e.role]} · ${money(e.hourly_cost)} per hour</div></div>
     <button onclick="employeeForm(S.empCache[${e.id}])" class="btn btn-ghost">${ic('edit')} Edit</button>
     <button onclick="taskForm({}, {assignee_id:${id}})" class="btn btn-primary">${ic('plus')} Give a task</button>
   </div>
@@ -1973,7 +1976,7 @@ const catPill = cat => `<span class="inline-flex items-center gap-1.5 px-2 py-0.
 
 async function pageCompliance() {
   setTitle('Compliance');
-  const f = S.f.comp = S.f.comp || { view: 'calendar', month: todayISO().slice(0, 7) };
+  const f = S.f.comp = S.f.comp || { view: matchMedia('(max-width: 640px)').matches ? 'list' : 'calendar', month: todayISO().slice(0, 7) };
   let from, to;
   if (f.view === 'calendar') { from = f.month + '-01'; const [y, m] = f.month.split('-').map(Number); to = `${f.month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`; }
   else { from = shiftISO(todayISO(), -45); to = shiftISO(todayISO(), 120); }
@@ -2038,7 +2041,7 @@ function compRow(c) {
       <div class="text-xs text-slate-500 mt-0.5 flex flex-wrap items-center gap-x-2">${c.period ? `<span>${esc(c.period)}</span>` : ''}${c.client_name ? clientChip(c.client_name, c.client_color) : '<span class="text-slate-400">Office-wide</span>'}${c.assignee_name ? `<span class="inline-flex items-center gap-1">${avatar(c.assignee_name, c.assignee_color, 5)}${esc(c.assignee_name)}</span>` : ''}${c.status === 'filed' && c.filed_by_name ? `<span>· filed by ${esc(c.filed_by_name)}</span>` : ''}</div></div>
     <div class="hidden sm:block">${compDueBadge(c)}</div>
     ${c.status === 'filed' ? `<span class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">${ic('check')}</span>`
-      : canFile ? `<button onclick="event.stopPropagation();compFileForm(${c.id})" class="btn btn-sm btn-go shrink-0">${ic('check')} Mark filed</button>` : '<span class="w-[98px]"></span>'}
+      : canFile ? `<button onclick="event.stopPropagation();compFileForm(${c.id})" class="btn btn-sm btn-go shrink-0" title="Mark filed" aria-label="Mark filed">${ic('check')}<span class="hidden sm:inline"> Mark filed</span></button>` : '<span class="hidden sm:inline-block w-[98px]"></span>'}
   </div>`;
 }
 function compList(items) {
@@ -2761,7 +2764,7 @@ async function pageSettings() {
       <div class="col-span-2"><label class="block text-xs font-semibold text-slate-600 mb-1">Leave allowed per person each year <span class="font-normal text-slate-400">· January–December</span></label>
         <div class="grid grid-cols-3 gap-3">${[['CL', 'Casual'], ['SL', 'Sick'], ['EL', 'Earned']].map(([t, l]) => `<label class="text-xs text-slate-500">${l}<input name="leave_quota_${t}" type="number" min="0" max="365" step="0.5" class="field mt-1" value="${esc(s['leave_quota_' + t] ?? '')}"></label>`).join('')}</div></div>
       <div class="col-span-2"><button class="btn btn-primary">Save</button></div></form></div>` : ''}
-    <div class="card p-5"><div class="flex items-center gap-3"><span class="kpi-ico bg-indigo-50 text-indigo-600">${ic('moon')}</span><div class="flex-1"><h3 class="font-bold text-slate-900">Appearance</h3><p class="text-sm text-slate-500">Saved on this device only.</p></div>
+    <div class="card p-5"><div class="flex flex-wrap items-center gap-3"><span class="kpi-ico bg-indigo-50 text-indigo-600">${ic('moon')}</span><div class="flex-1 min-w-[160px]"><h3 class="font-bold text-slate-900">Appearance</h3><p class="text-sm text-slate-500">Saved on this device only.</p></div>
       <div class="seg">${[['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['auto', 'Auto', 'zap']].map(([k, l, i]) => `<button data-theme-opt="${k}" onclick="setTheme('${k}')" class="${themePref() === k ? 'on' : ''}">${ic(i, 'w-3.5 h-3.5')}${l}</button>`).join('')}</div></div>
       <p class="text-xs text-slate-400 mt-2">Auto follows your phone or computer — dark when it's in dark mode.</p></div>
     <div class="card p-5" id="phone-card"><div class="flex items-start gap-3 mb-3"><span class="kpi-ico bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600">${ic('bell')}</span><div><h3 class="font-bold text-slate-900">Phone app & notifications</h3><p class="text-sm text-slate-500">Get alerts on this phone even when WorkDesk is closed${S.isMgr ? ' — new work from staff, tasks ready for review, leave, filings and messages' : ' — new tasks for you and chat messages'}.</p></div></div>

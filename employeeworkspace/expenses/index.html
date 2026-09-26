@@ -83,7 +83,8 @@
     .editable-cell:focus { background:#2a2b3d;outline:none; }
     .editable-select { background:#1e1f2e !important;border:none !important;color:#e5e7eb !important;font-size:.75rem !important;padding:2px 4px !important;border-radius:6px !important;width:100%;cursor:pointer; }
     .editable-select:focus { background:#2a2b3d !important;outline:none !important; }
-  .grid > *, .flex > .flex-1 { min-width: 0; }
+  /* let columns shrink to the screen — zero-specificity, so an explicit min-w-[…] on an element still wins */
+  :where(.grid) > *, :where(.flex) > :where(.flex-1) { min-width: 0; }
   /* Phones & small tablets: the desktop grids collapse — wide layouts to one column, stat/filter rows to two */
   @media (max-width: 1023px) {
     main .grid.grid-cols-3, main .grid.grid-cols-5, main .grid.grid-cols-2.gap-6, #categories-grid { grid-template-columns: minmax(0, 1fr); }
