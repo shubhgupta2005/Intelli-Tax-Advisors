@@ -36,7 +36,7 @@
     .modal-bg { background: rgba(0,0,0,.7); backdrop-filter: blur(6px); }
     .modal-box { background: #1e1f2e; border: 1px solid rgba(255,255,255,.1); border-radius: 20px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
     .stat-card { background: linear-gradient(135deg, #1e1f2e 0%, #252640 100%); border: 1px solid rgba(255,255,255,.07); border-radius: 16px; }
-    .table-row:hover { background: rgba(255,255,255,.03); }
+    .table-row:hover, .row-hover:hover { background: rgba(255,255,255,.03); }
     .drop-zone { border: 2px dashed rgba(99,102,241,.4); border-radius: 12px; transition: all .18s; }
     .drop-zone:hover, .drop-zone.drag-over { border-color: #6366f1; background: rgba(99,102,241,.08); }
     .tag { background: rgba(99,102,241,.18); color: #a5b4fc; border-radius: 6px; padding: 2px 8px; font-size: .72rem; font-weight: 500; }
@@ -83,6 +83,16 @@
     .editable-cell:focus { background:#2a2b3d;outline:none; }
     .editable-select { background:#1e1f2e !important;border:none !important;color:#e5e7eb !important;font-size:.75rem !important;padding:2px 4px !important;border-radius:6px !important;width:100%;cursor:pointer; }
     .editable-select:focus { background:#2a2b3d !important;outline:none !important; }
+  .grid > *, .flex > .flex-1 { min-width: 0; }
+  /* Phones & small tablets: the desktop grids collapse — wide layouts to one column, stat/filter rows to two */
+  @media (max-width: 1023px) {
+    main .grid.grid-cols-3, main .grid.grid-cols-5, main .grid.grid-cols-2.gap-6, #categories-grid { grid-template-columns: minmax(0, 1fr); }
+    main .grid.grid-cols-4:not(#categories-grid), main .grid.grid-cols-6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    main .grid > [class*="col-span-"] { grid-column: 1 / -1; }
+  }
+  html, body { overscroll-behavior-x: none; }
+  /* Phones: 16px text in form fields, otherwise iPhone zooms in on tap and the page starts sliding sideways */
+  @media (pointer: coarse) { :is(input, select, textarea):not(#_) { font-size: 16px !important; } }
   </style>
   <script>
     tailwind.config = {
@@ -103,7 +113,8 @@
 <body class="bg-[#13141f] text-gray-200 h-full min-h-screen flex">
 
 <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════════════ -->
-<aside id="sidebar" class="w-64 min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[#16172a] border-r border-white/5">
+<div id="sidebar-backdrop" onclick="toggleSidebar(false)" class="hidden lg:hidden fixed inset-0 z-30 bg-black/50"></div>
+<aside id="sidebar" class="w-64 max-w-[85vw] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[#16172a] border-r border-white/5 -translate-x-full lg:translate-x-0 transition-transform overflow-y-auto">
   <!-- Logo -->
   <div class="px-6 py-5 flex items-center gap-3 border-b border-white/5">
     <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
@@ -154,26 +165,27 @@
 </aside>
 
 <!-- ═══ MAIN CONTENT ══════════════════════════════════════════════════════════ -->
-<main class="ml-64 flex-1 min-h-screen flex flex-col">
+<main class="lg:ml-64 flex-1 min-w-0 min-h-screen flex flex-col">
 
   <!-- Top bar -->
-  <header class="sticky top-0 z-30 h-16 flex items-center justify-between px-8 bg-[#13141f]/90 backdrop-blur border-b border-white/5">
-    <div class="flex items-center gap-3">
-      <h1 id="page-title" class="text-xl font-bold text-white">Dashboard</h1>
+  <header class="sticky top-0 z-20 h-16 flex items-center justify-between gap-3 px-4 lg:px-8 bg-[#13141f]/90 backdrop-blur border-b border-white/5" style="padding-top:env(safe-area-inset-top)">
+    <div class="flex items-center gap-3 min-w-0">
+      <button onclick="toggleSidebar(true)" class="lg:hidden w-10 h-10 -ml-2 rounded-xl flex items-center justify-center text-gray-300 hover:bg-white/5" aria-label="Open menu"><i class="fas fa-bars"></i></button>
+      <h1 id="page-title" class="text-lg lg:text-xl font-bold text-white truncate">Dashboard</h1>
     </div>
     <div class="flex items-center gap-3">
-      <div class="relative">
+      <div class="relative hidden md:block">
         <input id="global-search" type="text" placeholder="Search expenses…" class="w-64 text-sm pl-9 pr-4 py-2 !rounded-xl" oninput="globalSearch(this.value)" />
         <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-xs"></i>
       </div>
       <button onclick="openExpenseModal()" class="btn-primary flex items-center gap-2 text-sm">
-        <i class="fas fa-plus text-xs"></i> Add Expense
+        <i class="fas fa-plus text-xs"></i> <span class="hidden sm:inline">Add Expense</span><span class="sm:hidden">Add</span>
       </button>
     </div>
   </header>
 
   <!-- Page content -->
-  <div class="flex-1 p-8">
+  <div class="flex-1 p-4 lg:p-8">
 
     <!-- ── DASHBOARD ── -->
     <section id="page-dashboard" class="fade-in">
@@ -228,13 +240,13 @@
             <h3 class="font-semibold text-white">Monthly Spend Trend</h3>
             <span class="text-xs text-gray-500">Last 12 months</span>
           </div>
-          <canvas id="chart-trend" height="200"></canvas>
+          <div class="relative h-60"><canvas id="chart-trend"></canvas></div>
         </div>
         <div class="col-span-2 card p-5">
           <div class="flex items-center justify-between mb-4">
             <h3 class="font-semibold text-white">By Category</h3>
           </div>
-          <canvas id="chart-category" height="200"></canvas>
+          <div class="relative h-60"><canvas id="chart-category"></canvas></div>
         </div>
       </div>
 
@@ -356,7 +368,7 @@
         <div>
           <div class="card p-5 mb-5">
             <h3 class="font-semibold text-white mb-1">API Documentation</h3>
-            <p class="text-xs text-gray-500 mb-4">Base URL: <code class="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded text-xs" id="api-base-url">https://intellitaxadvisors.com/employeeworkspace/expenses</code></p>
+            <p class="text-xs text-gray-500 mb-4">Base URL: <code class="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded text-xs" id="api-base-url" style="word-break:break-all">https://intellitaxadvisors.com/employeeworkspace/expenses</code></p>
             <div class="space-y-3 text-xs">
               <div class="bg-[#13141f] rounded-lg p-3">
                 <div class="text-green-400 font-mono mb-1">GET /api/expenses</div>
@@ -884,7 +896,12 @@ const pages = {
   reports: 'Reports'
 };
 
+function toggleSidebar(open) {
+  document.getElementById('sidebar').classList.toggle('-translate-x-full', !open);
+  document.getElementById('sidebar-backdrop').classList.toggle('hidden', !open);
+}
 function nav(page) {
+  toggleSidebar(false);
   Object.keys(pages).forEach(p => {
     document.getElementById(`page-${p}`)?.classList.toggle('hidden', p !== page);
   });
@@ -966,7 +983,7 @@ async function loadDashboard() {
   // Recent expenses
   const recentEl = document.getElementById('recent-expenses-list');
   recentEl.innerHTML = data.recent_expenses.slice(0,5).map(e => `
-    <div class="flex items-center gap-3 table-row rounded-xl p-2 cursor-pointer" onclick="viewExpense('${e.id}')">
+    <div class="flex items-center gap-3 row-hover rounded-xl p-2 cursor-pointer" onclick="viewExpense('${e.id}')">
       <div class="w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0" style="background:${(e.category_color||'#6366f1')}22">
         ${e.category_icon || '📦'}
       </div>
@@ -988,12 +1005,12 @@ async function loadDashboard() {
     const color = pct > 90 ? '#ef4444' : pct > 70 ? '#f59e0b' : '#10b981';
     return `
       <div>
-        <div class="flex justify-between items-center mb-1.5">
-          <div class="flex items-center gap-2">
-            <span class="w-2.5 h-2.5 rounded-full" style="background:${p.color}"></span>
-            <span class="text-sm text-gray-300">${p.name}</span>
+        <div class="flex flex-wrap justify-between items-center gap-x-3 mb-1.5">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${p.color}"></span>
+            <span class="text-sm text-gray-300 truncate">${p.name}</span>
           </div>
-          <span class="text-xs text-gray-500">${fmt(p.total)} / ${fmt(p.budget)}</span>
+          <span class="text-xs text-gray-500 whitespace-nowrap">${fmt(p.total)} / ${fmt(p.budget)}</span>
         </div>
         <div class="progress-bar">
           <div class="progress-fill" style="width:${pct}%;background:${color}"></div>
@@ -1627,7 +1644,7 @@ async function loadReport() {
     </div>
     <div class="col-span-3 card p-5">
       <h3 class="font-semibold text-white mb-4">Weekly Breakdown</h3>
-      <canvas id="report-chart" height="120"></canvas>
+      <div class="relative h-56"><canvas id="report-chart"></canvas></div>
     </div>
     <div class="col-span-3 card p-5">
       <h3 class="font-semibold text-white mb-4">Weekly Detail</h3>

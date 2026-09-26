@@ -97,8 +97,16 @@
   table.tbl tr.clickable:hover td { background:#f8f9ff; cursor:pointer; }
   .num { text-align:right; font-variant-numeric: tabular-nums; }
   .tabular { font-variant-numeric: tabular-nums; }
-  .seg { display:inline-flex; padding:3px; background:#eceef4; border-radius:.75rem; gap:2px; }
-  .seg button { padding:.38rem .8rem; border-radius:.6rem; font-size:.8rem; font-weight:600; color:#5b6178; display:inline-flex; align-items:center; gap:.35rem; }
+  .seg { display:inline-flex; max-width:100%; padding:3px; background:#eceef4; border-radius:.75rem; gap:2px;
+    overflow-x:auto; overscroll-behavior-x:contain; scrollbar-width:none; }   /* long tab rows scroll inside themselves */
+  .seg::-webkit-scrollbar { display:none; }
+  .seg button { flex:none; white-space:nowrap; padding:.38rem .8rem; border-radius:.6rem; font-size:.8rem; font-weight:600; color:#5b6178; display:inline-flex; align-items:center; gap:.35rem; }
+  .grid > *, .flex > .flex-1 { min-width:0; }                               /* let columns shrink to the screen */
+  html, body { overscroll-behavior-x:none; }
+  img, svg, video, canvas { max-width:100%; }
+  /* Phones: 16px text in form fields, otherwise iPhone zooms in on tap and the page starts sliding sideways */
+  @media (pointer: coarse) { :is(input, select, textarea):not(#_) { font-size: 16px !important; } }
+
   .seg button.on { background:#fff; color:#1e2235; box-shadow: 0 1px 3px rgba(16,24,40,.12); }
   .login-hero { background: radial-gradient(90% 70% at 10% 0%, rgba(129,140,248,.45), transparent 60%), radial-gradient(80% 60% at 100% 100%, rgba(192,132,252,.35), transparent 60%), linear-gradient(160deg, #111735, #0b1020); }
   .glass { background: rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); backdrop-filter: blur(8px); }
@@ -1821,9 +1829,9 @@ function rangeBar(key, extra = '') {
   const presets = [['today', 'Today'], ['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month'], ['all', 'All time']];
   return `<div class="flex flex-wrap gap-2 items-center mb-6">
     <div class="seg">${presets.map(([k, l]) => `<button onclick="setRange('${key}','${k}')" class="${f.preset === k ? 'on' : ''}">${l}</button>`).join('')}</div>
-    <div class="flex items-center gap-1.5"><input type="date" class="field !w-auto !py-2" value="${f.from || ''}" onchange="S.f.${key}.from=this.value;S.f.${key}.preset='';render()">
+    <div class="flex items-center gap-1.5 w-full sm:w-auto"><input type="date" class="field !w-auto min-w-0 flex-1 sm:flex-none !py-2" value="${f.from || ''}" onchange="S.f.${key}.from=this.value;S.f.${key}.preset='';render()">
     <span class="text-slate-400 text-sm">to</span>
-    <input type="date" class="field !w-auto !py-2" value="${f.to || ''}" onchange="S.f.${key}.to=this.value;S.f.${key}.preset='';render()"></div>
+    <input type="date" class="field !w-auto min-w-0 flex-1 sm:flex-none !py-2" value="${f.to || ''}" onchange="S.f.${key}.to=this.value;S.f.${key}.preset='';render()"></div>
     ${extra}</div>`;
 }
 function setRange(key, p) {

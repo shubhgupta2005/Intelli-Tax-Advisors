@@ -18,6 +18,9 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 input,select,textarea{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 [hidden]{display:none!important}
+  /* Phones: 16px text in form fields, otherwise iPhone zooms in on tap and the page starts sliding sideways */
+  @media (pointer: coarse) { :is(input, select, textarea):not(#_) { font-size: 16px !important; } }
+
 h1,h2,h3{font-family:var(--serif);font-weight:400;margin:0;color:var(--ink);letter-spacing:-.01em}
 code{font:13px var(--mono);background:var(--mist);padding:1px 5px}
 .eyebrow{font:500 10.5px/1 var(--mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ash)}

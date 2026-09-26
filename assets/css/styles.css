@@ -308,7 +308,7 @@
   @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}html{scroll-behavior:auto}}
 
   /* ---------- Additions (not in original single-file build) ---------- */
-  .hp{position:absolute!important;left:-9999px!important;width:1px;height:1px;overflow:hidden}
+  .hp{position:absolute!important;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}  /* hidden bot trap; takes no space */
   form[aria-busy="true"] button[type="submit"]{opacity:.6;pointer-events:none}
 
   /* ---------- Insight article page ---------- */
@@ -362,3 +362,6 @@
   .article .content ul{margin:0 0 20px;padding-left:22px}
   .article .content li{margin:0 0 8px}
   .article .content a{border-bottom:1px solid currentColor}
+
+  /* Phones: 16px text in form fields, otherwise iPhone zooms in on tap and the page starts sliding sideways */
+  @media (pointer: coarse) { :is(input, select, textarea):not(#_) { font-size: 16px !important; } }
