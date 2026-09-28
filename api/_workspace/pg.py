@@ -1,4 +1,4 @@
-"""Postgres (Supabase) access for WorkDesk and ExpenseFlow, shaped like the sqlite3 API the apps were written for.
+"""Postgres (Supabase) access for Intelli Workspace and ExpenseFlow, shaped like the sqlite3 API the apps were written for.
 
 The apps' SQL was written for SQLite. `translate()` rewrites the few SQLite-only pieces on the fly:
   ?  → %s placeholders            date()/strftime()/julianday() → wscompat.sq_* functions (supabase/004_workspace.sql)
@@ -284,7 +284,7 @@ def explain(e):
         return "DATABASE_URL doesn't match this Supabase project — copy the Transaction pooler string from Supabase → Connect."
     if isinstance(e, psycopg.errors.UndefinedTable) or isinstance(e, psycopg.errors.InvalidSchemaName):
         return "The workspace tables don't exist yet — run supabase/004_workspace.sql in the Supabase SQL Editor."
-    if "WorkDesk isn't set up" in msg:
+    if "Intelli Workspace isn't set up" in msg:
         return msg
     if isinstance(e, psycopg.OperationalError):
         detail = " ".join(msg.split())

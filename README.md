@@ -22,9 +22,9 @@ supabase/seed.sql       Initial content (generated from content.js)
 supabase/002_admin_portal.sql         Page sections table, scheduled posts, media limits
 supabase/003_compliance_calendar.sql  Compliance calendar overrides
 supabase/004_workspace.sql            Intelli Workspace tables (schemas workdesk, expenseflow) + private file bucket
-employeeworkspace/      Intelli Workspace frontend: WorkDesk (index.html) and ExpenseFlow (expenses/)
+workspace/              Intelli Workspace frontend: main app (index.html) and Intelli Expenses (expenses/)
 api/                    Intelli Workspace server (Python on Vercel): workdesk.py, expenseflow.py, _workspace/
-scripts/migrate_workspace.py          One-time copy of the office Mac's WorkDesk/ExpenseFlow data into Supabase
+scripts/migrate_workspace.py          One-time copy of the office Mac's Intelli Workspace/Intelli Expenses data into Supabase
 vercel.json             Routes, cron job and region for the workspace
 ```
 
@@ -89,16 +89,16 @@ In headings, wrap words in `*asterisks*` to set them in italic, as in the origin
 
 ## Intelli Workspace (staff portal)
 
-`https://intellitaxadvisors.com/employeeworkspace/` — linked from the homepage's **Intelli Workspace** button.
+`https://intellitaxadvisors.com/workspace/` — linked from the homepage's **Intelli Workspace** button.
 Staff sign in with their name and PIN. It contains:
 
-- **WorkDesk**: tasks, timers, time sheets, attendance & leave, client fees and retainers, expenses with receipt
+- **Intelli Workspace**: tasks, timers, time sheets, attendance & leave, client fees and retainers, expenses with receipt
   and invoice scanning, compliance due dates, team chat, notes, suggestion box, reports, imports/exports, phone notifications.
-- **ExpenseFlow** (`/employeeworkspace/expenses/`): project expenses, bank-statement import, API keys. Any signed-in
-  employee can open it (same sign-in as WorkDesk); outside systems can use an API key in the `X-API-Key` header.
+- **Intelli Expenses** (`/workspace/expenses/`): project expenses, bank-statement import, API keys. Any signed-in
+  employee can open it (same sign-in as Intelli Workspace); outside systems can use an API key in the `X-API-Key` header.
 
-How it runs: the pages are static files in `employeeworkspace/`; `vercel.json` sends `/employeeworkspace/api/…` (and
-receipt/chat file links) to the Python function `api/workdesk.py`, and `/employeeworkspace/expenses/api/…` to
+How it runs: the pages are static files in `employeeworkspace/`; `vercel.json` sends `/workspace/api/…` (and
+receipt/chat file links) to the Python function `api/workdesk.py`, and `/workspace/expenses/api/…` to
 `api/expenseflow.py`, in Vercel's Singapore region (next to the Supabase database). Data lives in the Supabase schemas
 `workdesk` and `expenseflow`, which the public Supabase API does not expose; files live in the private bucket `workspace`
 and are only handed out through short-lived signed links after the server checks who is asking.
@@ -112,13 +112,13 @@ and are only handed out through short-lived signed links after the server checks
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → *Project Settings → API Keys* → `service_role` (or a secret key). Server-only; never put it in browser code |
 | `CRON_SECRET` | Any long random string; Vercel sends it with the nightly backup call |
 
-**Moving the office data online (once):** stop WorkDesk on the office Mac, copy its `Expense Tracker Claude` folder to a
+**Moving the office data online (once):** stop Intelli Workspace on the office Mac, copy its `Expense Tracker Claude` folder to a
 computer with Python, then run `scripts/migrate_workspace.py` as described at the top of that file. Everyone keeps
 their PIN. Phone notifications must be switched on again (Settings → Phone notifications), because they were tied
 to the old address.
 
 **Security:** 5 wrong PINs lock that person for 15 minutes (20 per device); PINs are only ever stored hashed.
-Nightly backups (a zip of every WorkDesk table) go to `workspace/backups/`; admins can download them under
+Nightly backups (a zip of every Intelli Workspace table) go to `workspace/backups/`; admins can download them under
 Settings → Storage & daily backup.
 
 ## Run locally

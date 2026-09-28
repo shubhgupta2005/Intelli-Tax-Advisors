@@ -1,4 +1,4 @@
-# Vercel entry point: ExpenseFlow server for intellitaxadvisors.com/employeeworkspace/expenses (see api/_workspace/expenseflow.py).
+# Vercel entry point: ExpenseFlow server for intellitaxadvisors.com/workspace/expenses (see api/_workspace/expenseflow.py).
 import os
 import sys
 

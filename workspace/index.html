@@ -4,13 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0f1430">
-<link rel="manifest" href="/employeeworkspace/manifest.webmanifest">
-<link rel="apple-touch-icon" href="/employeeworkspace/icons/apple-touch-icon.png">
+<link rel="manifest" href="/workspace/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/workspace/icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="WorkDesk">
-<title>WorkDesk · Intelli Workspace</title>
+<meta name="apple-mobile-web-app-title" content="Intelli Workspace">
+<title>Intelli Workspace</title>
+<link rel="icon" href="/assets/img/brand/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/assets/img/brand/favicon-32.png" sizes="32x32" type="image/png">
 <script>
   (function () {
     var pref = 'auto'; try { pref = localStorage.getItem('wd-theme') || 'auto'; } catch (e) {}
@@ -23,14 +25,14 @@
   // Show any startup error on screen and in the server log instead of a blank page.
   window.addEventListener('error', function (e) {
     var msg = (e.message || 'Script failed to load') + (e.filename ? ' @ ' + e.filename + ':' + e.lineno : '') + (e.target && e.target.src ? ' [' + e.target.src + ']' : '');
-    try { fetch('/employeeworkspace/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: msg, ua: navigator.userAgent }) }); } catch (_) {}
+    try { fetch('/workspace/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: msg, ua: navigator.userAgent }) }); } catch (_) {}
     var b = document.getElementById('boot-error');
-    if (b) { b.style.display = 'block'; b.textContent = 'WorkDesk hit a problem: ' + msg; }
+    if (b) { b.style.display = 'block'; b.textContent = 'Intelli Workspace hit a problem: ' + msg; }
   }, true);
   window.addEventListener('unhandledrejection', function (e) {
     var r = e.reason || {}, msg = 'Unhandled: ' + (r.message || r) + (r.stack ? ' | ' + String(r.stack).split('\n')[0] : '');
     if (/Please sign in/.test(msg)) return;
-    try { fetch('/employeeworkspace/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: msg, ua: navigator.userAgent }) }); } catch (_) {}
+    try { fetch('/workspace/api/client-error', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg: msg, ua: navigator.userAgent }) }); } catch (_) {}
   });
 </script>
 <script src="vendor/tailwind.js"></script>
@@ -197,13 +199,13 @@
 </head>
 <body class="text-slate-800">
 <div id="boot-error" style="display:none;background:#fee2e2;color:#991b1b;padding:12px 16px;font:14px system-ui"></div>
-<noscript><div style="padding:40px;text-align:center;font:16px system-ui;color:#991b1b">WorkDesk needs JavaScript. In Safari: Settings → Security → turn on “Enable JavaScript”, then reload.</div></noscript>
-<div id="boot-loading" style="padding:40px;text-align:center;color:#64748b;font:15px system-ui">Loading WorkDesk…</div>
+<noscript><div style="padding:40px;text-align:center;font:16px system-ui;color:#991b1b">Intelli Workspace needs JavaScript. In Safari: Settings → Security → turn on “Enable JavaScript”, then reload.</div></noscript>
+<div id="boot-loading" style="padding:40px;text-align:center;color:#64748b;font:15px system-ui">Loading Intelli Workspace…</div>
 
 <!-- Login -->
 <div id="login" class="hidden"><div class="min-h-screen lg:grid lg:grid-cols-[1.05fr_1fr] bg-white">
   <div class="login-hero relative hidden lg:flex flex-col justify-between p-12 text-white overflow-hidden">
-    <div class="flex items-center gap-3"><div class="brand-mark w-10 h-10 rounded-xl flex items-center justify-center" data-ico="check"></div><span class="text-xl font-extrabold tracking-tight">WorkDesk</span></div>
+    <div class="flex items-center gap-3"><img src="/assets/img/brand/icon-192.png" alt="" class="w-10 h-10 rounded-xl ring-1 ring-white/15 shrink-0"><span class="text-xl font-extrabold tracking-tight">Intelli <span class="font-medium text-indigo-200">Workspace</span></span></div>
     <div class="max-w-md">
       <h1 class="text-4xl font-extrabold leading-tight tracking-tight">Every task, every hour,<br>every rupee — <span class="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 to-fuchsia-300">in one place.</span></h1>
       <p class="mt-4 text-indigo-100/80 text-[15px] leading-relaxed">Hand out work, see who's working on what right now, and know exactly what each client costs you.</p>
@@ -217,7 +219,7 @@
   </div>
   <div class="flex items-center justify-center p-6 sm:p-10 min-h-screen lg:min-h-0 bg-[var(--bg)] lg:bg-white">
     <div class="w-full max-w-md">
-      <div class="lg:hidden flex items-center gap-3 mb-8"><div class="brand-mark w-10 h-10 rounded-xl flex items-center justify-center text-white" data-ico="check"></div><span class="text-xl font-extrabold">WorkDesk</span></div>
+      <div class="lg:hidden flex items-center gap-3 mb-8"><img src="/assets/img/brand/icon-192.png" alt="" class="w-10 h-10 rounded-xl shrink-0"><span class="text-xl font-extrabold">Intelli <span class="font-medium text-slate-500">Workspace</span></span></div>
       <div id="login-body"></div>
     </div>
   </div>
@@ -227,8 +229,8 @@
 <div id="app" class="hidden min-h-screen flex">
   <aside id="sidebar" class="sidebar fixed lg:sticky top-0 z-30 h-screen w-64 shrink-0 flex flex-col -translate-x-full lg:translate-x-0 transition-transform">
     <div class="px-5 pt-6 pb-4 flex items-center gap-3">
-      <div class="brand-mark w-10 h-10 rounded-xl text-white flex items-center justify-center" data-ico="check"></div>
-      <div class="min-w-0"><div class="font-extrabold text-white text-[17px] leading-tight tracking-tight">WorkDesk</div><div id="company-name" class="text-xs text-indigo-200/60 truncate"></div></div>
+      <img src="/assets/img/brand/icon-192.png" alt="" class="w-10 h-10 rounded-xl ring-1 ring-white/15 shrink-0">
+      <div class="min-w-0"><div class="font-extrabold text-white text-[17px] leading-tight tracking-tight">Intelli <span class="font-medium text-indigo-200">Workspace</span></div><div id="company-name" class="text-xs text-indigo-200/60 truncate"></div></div>
     </div>
     <nav id="nav" class="flex-1 overflow-y-auto px-3 pb-3 text-[14px] scroll-thin"></nav>
     <div class="p-3">
@@ -425,8 +427,8 @@ async function api(path, opts = {}) {
   const o = { credentials: 'same-origin', ...opts };
   if (o.json !== undefined) { o.method = o.method || 'POST'; o.headers = { 'Content-Type': 'application/json' }; o.body = JSON.stringify(o.json); delete o.json; }
   const r = await fetch(path, o);
-  if (r.status === 401 && !path.startsWith('/employeeworkspace/api/login')) { showLogin(); throw new Error('Please sign in'); }
-  if (r.status === 403 && path !== '/employeeworkspace/api/gate') {
+  if (r.status === 401 && !path.startsWith('/workspace/api/login')) { showLogin(); throw new Error('Please sign in'); }
+  if (r.status === 403 && path !== '/workspace/api/gate') {
     const g = await r.clone().json().catch(() => ({}));
     if (g.gate) { showLogin(); throw new Error('Please sign in'); }
   }
@@ -446,7 +448,7 @@ async function showLogin() {
   hydrateIcons();
   $('#boot-loading')?.remove();
   $('#app').classList.add('hidden'); $('#login').classList.remove('hidden');
-  const lr = await fetch('/employeeworkspace/api/login-options');
+  const lr = await fetch('/workspace/api/login-options');
   if (lr.status === 403) return showGate();
   const d = await lr.json();
   $('#login-company-hero').textContent = d.company ? '© ' + d.company : '';
@@ -474,7 +476,7 @@ function showGate(err) {
 }
 async function passGate(e) {
   e.preventDefault();
-  const r = await fetch('/employeeworkspace/api/gate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('#gate-code').value }) });
+  const r = await fetch('/workspace/api/gate', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: $('#gate-code').value }) });
   if (r.ok) return showLogin();
   const d = await r.json().catch(() => ({}));
   showGate(d.error || 'Please try again');
@@ -493,20 +495,20 @@ function pickUser(id, name, color) {
 }
 async function doLogin(e, id) {
   e.preventDefault();
-  try { await api('/employeeworkspace/api/login', { json: { employee_id: id, pin: $('#pin').value } }); boot(); }
+  try { await api('/workspace/api/login', { json: { employee_id: id, pin: $('#pin').value } }); boot(); }
   catch (err) { $('#login-err').textContent = err.message; $('#pin').value = ''; $('#pin').focus(); }
 }
-async function logout() { await api('/employeeworkspace/api/logout', { method: 'POST' }); S.me = null; S.unread = 0; $('#bell').innerHTML = ''; $('#punchbar').innerHTML = ''; $('#notif-panel').classList.add('hidden'); showLogin(); }
+async function logout() { await api('/workspace/api/logout', { method: 'POST' }); S.me = null; S.unread = 0; $('#bell').innerHTML = ''; $('#punchbar').innerHTML = ''; $('#notif-panel').classList.add('hidden'); showLogin(); }
 
 async function boot() {
   try {
-    const r = await api('/employeeworkspace/api/me');
+    const r = await api('/workspace/api/me');
     S.me = r.user; S.isMgr = r.is_manager; S.perm = r.perms || {};
     document.body.classList.toggle('view-only', !!S.perm.view_only); document.body.classList.toggle('hide-money', !!S.perm.hide_money);
   } catch (e) {
-    // 401 already showed the sign-in screen; anything else means the WorkDesk server couldn't be reached
+    // 401 already showed the sign-in screen; anything else means the Intelli Workspace server couldn't be reached
     const b = $('#boot-loading');
-    if (b && e.message !== 'Please sign in') b.innerHTML = 'WorkDesk can’t reach its server right now. Please try again in a minute.<br><small style="display:block;margin-top:8px;color:#94a3b8">' + esc(e.message) + '</small><button onclick="location.reload()" style="margin-top:14px;padding:8px 16px;border-radius:10px;background:#4f46e5;color:#fff;font:600 14px system-ui">Try again</button>';
+    if (b && e.message !== 'Please sign in') b.innerHTML = 'Intelli Workspace can’t reach its server right now. Please try again in a minute.<br><small style="display:block;margin-top:8px;color:#94a3b8">' + esc(e.message) + '</small><button onclick="location.reload()" style="margin-top:14px;padding:8px 16px;border-radius:10px;background:#4f46e5;color:#fff;font:600 14px system-ui">Try again</button>';
     return;
   }
   await loadMeta();
@@ -521,7 +523,7 @@ async function boot() {
   startLoops();
 }
 async function loadMeta() {
-  S.meta = await api('/employeeworkspace/api/meta');
+  S.meta = await api('/workspace/api/meta');
   $('#company-name').textContent = S.meta.settings.company || '';
 }
 
@@ -536,7 +538,7 @@ function stopLoops() { clearInterval(pollH); clearInterval(tickH); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && S.me && pollH) pollLive(); });
 async function pollLive(initial) {
   let d;
-  try { d = await api('/employeeworkspace/api/live'); } catch { return; }
+  try { d = await api('/workspace/api/live'); } catch { return; }
   S.timers = d.timers;
   renderTimerBar();
   if (!initial && d.unread > (S.unread || 0) && d.latest) toast(`${d.latest.actor_name || 'Someone'} ${d.latest.message}`, 'bell', 6000);
@@ -579,7 +581,7 @@ async function toggleNotifs(force) {
   if (!open) { panel.classList.add('hidden'); return; }
   panel.classList.remove('hidden');
   panel.innerHTML = '<div class="p-6 text-sm text-slate-400">Loading…</div>';
-  const d = await api('/employeeworkspace/api/notifications');
+  const d = await api('/workspace/api/notifications');
   panel.innerHTML = `<div class="flex items-center justify-between px-5 py-4 border-b border-[var(--line)]">
       <div><div class="font-extrabold text-slate-900">Notifications</div><div class="text-xs text-slate-500">${d.unread ? d.unread + ' new' : 'You are all caught up'}</div></div>
       <div class="flex items-center gap-1">${d.unread ? `<button onclick="markNotifs()" class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2 py-1">Mark all read</button>` : ''}<button onclick="toggleNotifs(false)" class="icon-btn">${ic('x')}</button></div></div>
@@ -591,7 +593,7 @@ async function toggleNotifs(force) {
       </button>`).join('') || `<div class="p-2">${empty('No notifications yet. You will be told here when staff add their own work.')}</div>`}</div>
     ${S.isMgr ? `<div class="px-5 py-3 border-t border-[var(--line)] bg-slate-50/70"><button onclick="toggleNotifs(false);S.f.tasks={view:'list',self_added:1};location.hash='#/tasks';render()" class="text-sm font-semibold text-indigo-600 hover:text-indigo-800">See all self-added work →</button></div>` : ''}`;
 }
-async function markNotifs(ids) { await api('/employeeworkspace/api/notifications/read', { json: { ids: ids || [] } }); await pollLive(true); if (!ids) toggleNotifs(true); }
+async function markNotifs(ids) { await api('/workspace/api/notifications/read', { json: { ids: ids || [] } }); await pollLive(true); if (!ids) toggleNotifs(true); }
 async function openNotif(id, taskId) { await markNotifs([id]); toggleNotifs(false); if (taskId) openTask(taskId); }
 document.addEventListener('click', e => { const p = $('#notif-panel'); if (p && !p.classList.contains('hidden') && !p.contains(e.target) && !$('#bell').contains(e.target)) p.classList.add('hidden'); });
 
@@ -607,7 +609,7 @@ function renderTimerBar() {
     : `<a href="#/my-work" title="No task timer running — pick a task on My Work" class="hidden 2xl:inline-flex items-center gap-2 whitespace-nowrap text-sm font-medium text-slate-500 hover:text-indigo-600 bg-white border border-[var(--line)] rounded-2xl px-3.5 py-2 shadow-sm">${ic('clock')} No task timer</a>`;
 }
 async function startTimer(taskId) {
-  await run(() => api('/employeeworkspace/api/timer/start', { json: { task_id: taskId } }), 'Timer started');
+  await run(() => api('/workspace/api/timer/start', { json: { task_id: taskId } }), 'Timer started');
   await afterChange();
 }
 function stopTimer() {
@@ -615,7 +617,7 @@ function stopTimer() {
   openForm({
     title: 'Stop the timer', submit: 'Stop & save time', intro: `<div class="rounded-2xl bg-emerald-50 border border-emerald-100 p-4 mb-4 flex items-center gap-3"><span class="kpi-ico bg-white text-emerald-600">${ic('clock')}</span><div class="min-w-0"><div class="text-xs text-emerald-700 font-semibold">Time spent on</div><div class="font-semibold text-slate-900 truncate">${esc(t.task_title)}</div></div><div class="ml-auto text-xl font-extrabold text-emerald-700 tabular">${elapsed(t.started_at)}</div></div>`,
     fields: [{ name: 'note', label: 'What did you do? (optional — appears on the time sheet)', type: 'textarea', placeholder: 'e.g. Checked 40 purchase bills, 3 queries raised' }],
-    onSubmit: async v => { const r = await api('/employeeworkspace/api/timer/stop', { json: v }); toast('Logged ' + hm(r.minutes)); await afterChange(); }
+    onSubmit: async v => { const r = await api('/workspace/api/timer/stop', { json: v }); toast('Logged ' + hm(r.minutes)); await afterChange(); }
   });
 }
 async function afterChange() { await pollLive(true); await render(true); if (S.drawerTask) openTask(S.drawerTask, true); }
@@ -634,14 +636,14 @@ function renderTabbar() {
 }
 let installEvt = null;
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (S.me) buildNav(); });
-window.addEventListener('appinstalled', () => { installEvt = null; if (S.me) buildNav(); toast('WorkDesk is installed — open it from your home screen'); });
+window.addEventListener('appinstalled', () => { installEvt = null; if (S.me) buildNav(); toast('Intelli Workspace is installed — open it from your home screen'); });
 async function installApp() {
   if (installEvt) { installEvt.prompt(); await installEvt.userChoice.catch(() => {}); installEvt = null; buildNav(); return; }
   const ios = isIOS();
-  openForm({ title: 'Install WorkDesk on this phone', icon: 'phone', submit: 'Got it', fields: [],
+  openForm({ title: 'Install Intelli Workspace on this phone', icon: 'phone', submit: 'Got it', fields: [],
     intro: `<div class="space-y-3 text-sm text-slate-600 mb-2">${ios
-      ? `<p>1. Open <b>intellitaxadvisors.com/employeeworkspace</b> in <b>Safari</b>.</p><p>2. Tap the <b>Share</b> button (square with an arrow), then <b>Add to Home Screen</b>.</p><p>3. Open WorkDesk from the new icon and sign in. Then turn on notifications in Settings.</p>`
-      : `<p>1. Open <b>intellitaxadvisors.com/employeeworkspace</b> in <b>Chrome</b>.</p><p>2. Tap <b>⋮</b> (top right), then <b>Install app</b> or <b>Add to Home screen</b>.</p><p>3. Open WorkDesk from the new icon and sign in. Then turn on notifications in Settings.</p>`}
+      ? `<p>1. Open <b>intellitaxadvisors.com/workspace</b> in <b>Safari</b>.</p><p>2. Tap the <b>Share</b> button (square with an arrow), then <b>Add to Home Screen</b>.</p><p>3. Open Intelli Workspace from the new icon and sign in. Then turn on notifications in Settings.</p>`
+      : `<p>1. Open <b>intellitaxadvisors.com/workspace</b> in <b>Chrome</b>.</p><p>2. Tap <b>⋮</b> (top right), then <b>Install app</b> or <b>Add to Home screen</b>.</p><p>3. Open Intelli Workspace from the new icon and sign in. Then turn on notifications in Settings.</p>`}
       <p class="text-xs text-slate-400">It works anywhere with internet — office, home or travelling — and opens full-screen like any other app.</p></div>`,
     onSubmit: async () => {} });
 }
@@ -651,26 +653,26 @@ const isIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.p
 function b64ToBytes(b64) { const p = '='.repeat((4 - b64.length % 4) % 4), raw = atob((b64 + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(raw, c => c.charCodeAt(0)); }
 async function registerSW() {
   if (!('serviceWorker' in navigator) || !window.isSecureContext) return null;
-  try { return await navigator.serviceWorker.register('/employeeworkspace/sw.js', { scope: '/employeeworkspace/' }); } catch (e) { return null; }
+  try { return await navigator.serviceWorker.register('/workspace/sw.js', { scope: '/workspace/' }); } catch (e) { return null; }
 }
 async function currentPushSub() {
   if (!pushSupported() || !window.isSecureContext) return null;
-  const reg = await navigator.serviceWorker.getRegistration('/employeeworkspace/'); return reg ? reg.pushManager.getSubscription() : null;
+  const reg = await navigator.serviceWorker.getRegistration('/workspace/'); return reg ? reg.pushManager.getSubscription() : null;
 }
 async function enablePush() {
-  if (!window.isSecureContext) throw new Error('Notifications need the secure link: open WorkDesk at https://intellitaxadvisors.com/employeeworkspace');
-  if (!pushSupported()) throw new Error(isIOS() && !isStandalone() ? 'On iPhone, first add WorkDesk to your Home Screen (steps below), open it from there, then turn on notifications.' : 'This browser does not support notifications.');
+  if (!window.isSecureContext) throw new Error('Notifications need the secure link: open Intelli Workspace at https://intellitaxadvisors.com/workspace');
+  if (!pushSupported()) throw new Error(isIOS() && !isStandalone() ? 'On iPhone, first add Intelli Workspace to your Home Screen (steps below), open it from there, then turn on notifications.' : 'This browser does not support notifications.');
   const perm = await Notification.requestPermission();
-  if (perm !== 'granted') throw new Error('Notifications were blocked. Allow them for WorkDesk in your phone settings and try again.');
+  if (perm !== 'granted') throw new Error('Notifications were blocked. Allow them for Intelli Workspace in your phone settings and try again.');
   const reg = await registerSW(); await navigator.serviceWorker.ready;
-  const { key } = await api('/employeeworkspace/api/push/key');
+  const { key } = await api('/workspace/api/push/key');
   let sub = await reg.pushManager.getSubscription();
   if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(key) });
-  await api('/employeeworkspace/api/push/subscribe', { json: { subscription: sub.toJSON(), device: navigator.userAgent } });
+  await api('/workspace/api/push/subscribe', { json: { subscription: sub.toJSON(), device: navigator.userAgent } });
 }
 async function disablePush() {
   const sub = await currentPushSub();
-  if (sub) { await api('/employeeworkspace/api/push/unsubscribe', { json: { endpoint: sub.endpoint } }); await sub.unsubscribe(); }
+  if (sub) { await api('/workspace/api/push/unsubscribe', { json: { endpoint: sub.endpoint } }); await sub.unsubscribe(); }
 }
 
 // ─── Theme (light / dark / auto) ────────────────────────────────────────────
@@ -717,7 +719,7 @@ function buildNav() {
     const head = group !== last ? `<div class="nav-group">${group}</div>` : '';
     last = group;
     return head + `<a href="#/${k}" data-nav="${k}" onclick="toggleSidebar(false)" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic(icon, 'w-[18px] h-[18px]')}<span class="flex-1">${label}</span>${k === 'chat' ? '<span data-badge="chat" class="hidden min-w-[20px] h-5 px-1.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold items-center justify-center"></span>' : ''}${k === 'suggestions' ? '<span data-badge="sug" class="hidden min-w-[20px] h-5 px-1.5 rounded-full bg-amber-400 text-amber-950 text-[11px] font-bold items-center justify-center"></span>' : ''}</a>`;
-  }).join('') + (canSee('expenseflow') ? '' : '<!--') + `<a href="/employeeworkspace/expenses/" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic('wallet', 'w-[18px] h-[18px]')}<span class="flex-1">ExpenseFlow</span><span class="text-xs opacity-60">↗</span></a>` + (canSee('expenseflow') ? '' : '-->')
+  }).join('') + (canSee('expenseflow') ? '' : '<!--') + `<a href="/workspace/expenses/" class="nav-link flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5">${ic('wallet', 'w-[18px] h-[18px]')}<span class="flex-1">Intelli Expenses</span><span class="text-xs opacity-60">↗</span></a>` + (canSee('expenseflow') ? '' : '-->')
     + (isStandalone() ? '' : `<button onclick="toggleSidebar(false);installApp()" class="nav-link w-full flex items-center gap-3 px-3 py-2.5 rounded-xl mb-0.5 mt-2 text-left">${ic('phone', 'w-[18px] h-[18px]')}<span class="flex-1">Install app</span>${installEvt ? '<span class="text-[10px] font-bold bg-emerald-500 text-white rounded-full px-2 py-0.5">1 tap</span>' : ''}</button>`);
 }
 function toggleSidebar(open) {
@@ -746,7 +748,7 @@ async function render(soft) {
     await fn();
   } catch (e) { if (e.message !== 'Please sign in') $('#view').innerHTML = `<div class="card p-6 text-red-600">${esc(e.message)}</div>`; }
 }
-const setTitle = (t, sub) => { const page = location.hash.split('/')[1]; $('#page-title').textContent = t; $('#page-sub').textContent = sub ?? (NAV.find(n => n[0] === page)?.[5] || ''); document.title = t + ' · WorkDesk'; };
+const setTitle = (t, sub) => { const page = location.hash.split('/')[1]; $('#page-title').textContent = t; $('#page-sub').textContent = sub ?? (NAV.find(n => n[0] === page)?.[5] || ''); document.title = t + ' · Intelli Workspace'; };
 
 // ─── Generic form modal ──────────────────────────────────────────────────────
 function openForm({ title, fields, values = {}, submit = 'Save', onSubmit, intro = '', danger, sub = '', icon = '' }) {
@@ -813,7 +815,7 @@ function scanDialog(files) {
   $('#modal-box').classList.add('sm:!max-w-3xl');
   $('#modal-box').innerHTML = `<div class="p-6">
     <div class="flex items-start gap-3 mb-5"><div class="kpi-ico bg-emerald-50 text-emerald-600">${ic('scan', 'w-5 h-5')}</div>
-      <div class="flex-1"><h3 class="text-lg font-extrabold tracking-tight text-slate-900">Scan invoices</h3><p class="text-sm text-slate-500">WorkDesk reads each invoice in your browser, then keeps it in the office's private storage.</p></div>
+      <div class="flex-1"><h3 class="text-lg font-extrabold tracking-tight text-slate-900">Scan invoices</h3><p class="text-sm text-slate-500">Intelli Workspace reads each invoice in your browser, then keeps it in the office's private storage.</p></div>
       <button onclick="closeModal()" class="icon-btn">${ic('x')}</button></div>
     <div id="scan-body">
       <label class="btn btn-go w-full justify-center !py-4 !text-[15px] !rounded-2xl mb-3 cursor-pointer">${ic('camera', 'w-5 h-5')} Take a photo of an invoice
@@ -908,7 +910,7 @@ async function scanUpload(files) {
     const f = await shrinkImage(files[i]);
     if (f.size > 4 * 1024 * 1024) { SCAN.items.push({ file_name: f.name, error: 'Larger than 4 MB — add this one by hand' }); continue; }
     const fd = new FormData(); fd.append('files', f); fd.append('text_0', await readInvoiceText(f));
-    try { SCAN.items.push(...(await api('/employeeworkspace/api/expenses/scan', { method: 'POST', body: fd })).items); }
+    try { SCAN.items.push(...(await api('/workspace/api/expenses/scan', { method: 'POST', body: fd })).items); }
     catch (e) { SCAN.items.push({ file_name: f.name, error: e.message }); }
   }
   renderScanReview();
@@ -919,8 +921,8 @@ function scanCard(it, i) {
   const clientOpts = `<option value="">Office (no client)</option>` + S.meta.clients.filter(c => c.status === 'active').map(c => `<option value="${c.id}" ${String(it.client_id || '') === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
   if (!it.file) return `<div class="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">${esc(it.file_name)} — ${esc(it.error)}</div>`;
   return `<div class="rounded-2xl border border-[var(--line)] p-3 sm:p-4 flex gap-4" data-scan="${i}">
-    <a href="/employeeworkspace/receipts-scan/${esc(it.file)}" target="_blank" class="w-24 sm:w-32 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-[var(--line)] flex items-center justify-center self-start" title="Open invoice">
-      ${isImg ? `<img src="/employeeworkspace/receipts-scan/${esc(it.file)}" class="w-full h-32 sm:h-40 object-contain bg-white">` : `<div class="h-32 sm:h-40 flex flex-col items-center justify-center gap-1 text-slate-500 text-xs font-semibold">${ic('clip', 'w-6 h-6')}PDF<span class="text-indigo-600">Open</span></div>`}</a>
+    <a href="/workspace/receipts-scan/${esc(it.file)}" target="_blank" class="w-24 sm:w-32 shrink-0 rounded-xl overflow-hidden bg-slate-100 border border-[var(--line)] flex items-center justify-center self-start" title="Open invoice">
+      ${isImg ? `<img src="/workspace/receipts-scan/${esc(it.file)}" class="w-full h-32 sm:h-40 object-contain bg-white">` : `<div class="h-32 sm:h-40 flex flex-col items-center justify-center gap-1 text-slate-500 text-xs font-semibold">${ic('clip', 'w-6 h-6')}PDF<span class="text-indigo-600">Open</span></div>`}</a>
     <div class="flex-1 min-w-0 grid grid-cols-2 gap-2.5">
       <div class="col-span-2 flex items-center gap-2"><span class="text-xs text-slate-400 truncate flex-1">${esc(it.file_name)}${it.error ? ` · <span class="text-amber-700">${esc(it.error)}</span>` : ''}</span><button onclick="SCAN.items[${i}].removed=true;renderScanReview()" class="icon-btn !w-7 !h-7" title="Remove">${ic('x', 'w-3.5 h-3.5')}</button></div>
       <label class="col-span-2"><span class="text-[11px] font-bold text-slate-500">Description</span><input class="field !py-2 ${it.vendor ? '' : 'ring-2 ring-amber-200'}" value="${esc(it.title ?? it.vendor ?? '')}" oninput="SCAN.items[${i}].title=this.value" placeholder="What was it for?"></label>
@@ -962,7 +964,7 @@ async function saveScanned() {
     const notes = [it.invoice_no ? 'Invoice ' + it.invoice_no : '', it.gstin ? 'GSTIN ' + it.gstin : ''].filter(Boolean).join(' · ');
     Object.entries({ title: (it.title ?? it.vendor).trim(), amount: it.amount, date: it.date || todayISO(), category: it.category || 'Other',
       client_id: it.client_id || '', billable: it.billable === 0 ? 0 : 1, notes, scan_file: it.file, scan_name: it.file_name }).forEach(([k, v]) => fd.append(k, v ?? ''));
-    try { await api('/employeeworkspace/api/expenses', { method: 'POST', body: fd }); it.saved = true; n++; }
+    try { await api('/workspace/api/expenses', { method: 'POST', body: fd }); it.saved = true; n++; }
     catch (e) { $('#scan-err').textContent = `${it.file_name}: ${e.message}`; await afterChange(); return; }
   }
   closeModal(); toast(`Saved ${n} expense${n === 1 ? '' : 's'} with their invoices attached`); await afterChange();
@@ -976,11 +978,11 @@ function importDialog(kind) {
   $('#modal-box').classList.add('sm:!max-w-3xl');
   $('#modal-box').innerHTML = `<div class="p-6">
     <div class="flex items-start gap-3 mb-5"><div class="kpi-ico bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600">${ic('download', 'w-5 h-5 rotate-180')}</div>
-      <div class="flex-1"><h3 class="text-lg font-extrabold tracking-tight text-slate-900">Import ${label}</h3><p class="text-sm text-slate-500">Use the standard WorkDesk template so everything lands in the right place.</p></div>
+      <div class="flex-1"><h3 class="text-lg font-extrabold tracking-tight text-slate-900">Import ${label}</h3><p class="text-sm text-slate-500">Use the standard Intelli Workspace template so everything lands in the right place.</p></div>
       <button onclick="closeModal()" class="icon-btn">${ic('x')}</button></div>
     <div id="imp-body">
       <div class="grid sm:grid-cols-3 gap-3 mb-5">
-        <a href="/employeeworkspace/api/import/template/${kind}.xlsx" class="rounded-2xl border border-[var(--line)] p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition block">
+        <a href="/workspace/api/import/template/${kind}.xlsx" class="rounded-2xl border border-[var(--line)] p-4 hover:border-indigo-300 hover:bg-indigo-50/40 transition block">
           <div class="flex items-center gap-2 text-xs font-bold text-indigo-600 mb-1"><span class="w-5 h-5 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[11px]">1</span>Download</div>
           <div class="font-semibold text-slate-900 text-sm">${ic('download', 'w-4 h-4 inline -mt-0.5')} ${kind === 'clients' ? 'Clients' : 'Expenses'} template (Excel)</div>
           <div class="text-xs text-slate-500 mt-1">Has the right columns, an example row and drop-downs.</div></a>
@@ -994,7 +996,7 @@ function importDialog(kind) {
         <span class="font-semibold text-slate-800" id="imp-file-label">Choose the filled template</span>
         <span class="text-xs text-slate-500">Excel (.xlsx) or CSV</span>
         <input type="file" accept=".xlsx,.xlsm,.csv" class="hidden" onchange="IMP.file=this.files[0];$('#imp-file-label').textContent=IMP.file?IMP.file.name:'Choose the filled template';importPreview()"></label>
-      ${kind === 'expenses' ? `<label class="flex items-center gap-2 text-sm text-slate-700 mt-3"><input type="checkbox" id="imp-create" class="w-4 h-4 accent-indigo-600" onchange="if(IMP.file)importPreview()"> Create clients that aren't in WorkDesk yet</label>` : ''}
+      ${kind === 'expenses' ? `<label class="flex items-center gap-2 text-sm text-slate-700 mt-3"><input type="checkbox" id="imp-create" class="w-4 h-4 accent-indigo-600" onchange="if(IMP.file)importPreview()"> Create clients that aren't in Intelli Workspace yet</label>` : ''}
       <div id="imp-err" class="text-sm text-red-600 mt-3"></div>
     </div></div>`;
   $('#modal').classList.remove('hidden');
@@ -1005,7 +1007,7 @@ async function importPreview() {
   const create = $('#imp-create')?.checked; if (create) fd.append('create_missing', '1');
   $('#imp-err').textContent = 'Checking…';
   let d;
-  try { d = await api(`/employeeworkspace/api/import/${IMP.kind}/preview`, { method: 'POST', body: fd }); } catch (e) { $('#imp-err').textContent = e.message; return; }
+  try { d = await api(`/workspace/api/import/${IMP.kind}/preview`, { method: 'POST', body: fd }); } catch (e) { $('#imp-err').textContent = e.message; return; }
   IMP.rows = d.rows; IMP.create = !!create;
   const isC = IMP.kind === 'clients';
   const head = isC ? '<th>Row</th><th>Check</th><th>Client</th><th>Contact</th><th>Phone</th><th>GSTIN</th><th>Status</th>'
@@ -1018,7 +1020,7 @@ async function importPreview() {
     </tr>`).join('');
   $('#imp-body').innerHTML = `
     <div class="flex flex-wrap items-center gap-2 mb-3">${pill(d.ready + ' ready to import', 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200')}${d.errors ? pill(d.errors + ' will be skipped', 'bg-red-50 text-red-700 ring-1 ring-red-200') : ''}<span class="text-xs text-slate-500 truncate">${esc(IMP.file.name)}</span></div>
-    ${IMP.kind === 'expenses' ? `<label class="flex items-center gap-2 text-sm text-slate-700 mb-3"><input type="checkbox" id="imp-create" ${IMP.create ? 'checked' : ''} class="w-4 h-4 accent-indigo-600" onchange="importPreview()"> Create clients that aren't in WorkDesk yet</label>` : ''}
+    ${IMP.kind === 'expenses' ? `<label class="flex items-center gap-2 text-sm text-slate-700 mb-3"><input type="checkbox" id="imp-create" ${IMP.create ? 'checked' : ''} class="w-4 h-4 accent-indigo-600" onchange="importPreview()"> Create clients that aren't in Intelli Workspace yet</label>` : ''}
     <div class="rounded-2xl border border-[var(--line)] overflow-auto max-h-[45vh] scroll-thin"><table class="tbl">${'<thead><tr>' + head + '</tr></thead>'}<tbody>${body}</tbody></table></div>
     ${d.errors ? '<p class="text-xs text-slate-500 mt-2">Fix the red rows in your file and upload again, or import the ready rows now.</p>' : ''}
     <div id="imp-err" class="text-sm text-red-600 mt-2"></div>
@@ -1027,7 +1029,7 @@ async function importPreview() {
 }
 async function importCommit() {
   try {
-    const r = await api(`/employeeworkspace/api/import/${IMP.kind}/commit`, { json: { rows: IMP.rows.filter(x => !x.error), create_missing: IMP.create } });
+    const r = await api(`/workspace/api/import/${IMP.kind}/commit`, { json: { rows: IMP.rows.filter(x => !x.error), create_missing: IMP.create } });
     closeModal();
     toast(`Imported ${r.added} ${IMP.kind === 'clients' ? 'clients' : 'expenses'}${r.new_clients ? ` and ${r.new_clients} new client${r.new_clients > 1 ? 's' : ''}` : ''}`);
     await loadMeta(); await afterChange();
@@ -1059,8 +1061,8 @@ function taskForm(t = {}, preset = {}) {
     ],
     onSubmit: async v => {
       if (!v.status) v.status = t.status || 'todo';
-      if (isNew) { await api('/employeeworkspace/api/tasks', { json: v }); toast('Task assigned'); await afterChange(); }
-      else { await api('/employeeworkspace/api/tasks/' + t.id, { method: 'PUT', json: v }); toast('Task updated'); await afterChange(); }
+      if (isNew) { await api('/workspace/api/tasks', { json: v }); toast('Task assigned'); await afterChange(); }
+      else { await api('/workspace/api/tasks/' + t.id, { method: 'PUT', json: v }); toast('Task updated'); await afterChange(); }
     }
   });
 }
@@ -1084,23 +1086,23 @@ function selfWorkForm(t = {}) {
     onSubmit: async v => {
       if (isNew) {
         v.self_added = 1; v.minutes = (+v.hours || 0) * 60 + (+v.mins || 0);
-        await api('/employeeworkspace/api/tasks', { json: v }); toast('Work added — your manager has been notified');
-      } else { await api('/employeeworkspace/api/tasks/' + t.id, { method: 'PUT', json: v }); toast('Saved'); }
+        await api('/workspace/api/tasks', { json: v }); toast('Work added — your manager has been notified');
+      } else { await api('/workspace/api/tasks/' + t.id, { method: 'PUT', json: v }); toast('Saved'); }
       await afterChange();
     }
   });
 }
 async function setStatus(id, status) {
-  await run(() => api('/employeeworkspace/api/tasks/' + id, { method: 'PUT', json: { status } }), 'Moved to “' + STATUS[status][0] + '”');
+  await run(() => api('/workspace/api/tasks/' + id, { method: 'PUT', json: { status } }), 'Moved to “' + STATUS[status][0] + '”');
   await afterChange();
 }
 function deleteTask(id) {
   confirmBox('Delete this task?', 'Its time entries and comments will be deleted too. Linked expenses are kept.', async () => {
-    await api('/employeeworkspace/api/tasks/' + id, { method: 'DELETE' }); toast('Task deleted'); closeDrawer(); await afterChange();
+    await api('/workspace/api/tasks/' + id, { method: 'DELETE' }); toast('Task deleted'); closeDrawer(); await afterChange();
   });
 }
 async function logTimeForm(preset = {}) {
-  const tasks = await api('/employeeworkspace/api/tasks?' + qs({ mine: S.isMgr ? '' : 1 }));
+  const tasks = await api('/workspace/api/tasks?' + qs({ mine: S.isMgr ? '' : 1 }));
   const fields = [
     { name: 'task_id', label: 'Which task?', type: 'select', required: true, blank: 'Choose a task…', options: tasks.filter(t => t.status !== 'done' || t.id == preset.task_id).map(t => [t.id, `${t.title}${t.client_name ? ' · ' + t.client_name : ''}${S.isMgr && t.assignee_name ? ' (' + t.assignee_name + ')' : ''}`]) },
     { name: 'date', label: 'Date', type: 'date', required: true, half: true },
@@ -1113,13 +1115,13 @@ async function logTimeForm(preset = {}) {
     title: 'Add time manually', icon: 'clock', sub: 'Forgot the timer? Enter the time here.', submit: 'Save time', values: { date: todayISO(), ...preset }, fields,
     onSubmit: async v => {
       v.minutes = (+v.hours || 0) * 60 + (+v.mins || 0);
-      await api('/employeeworkspace/api/timelogs', { json: v }); toast('Time saved'); await afterChange();
+      await api('/workspace/api/timelogs', { json: v }); toast('Time saved'); await afterChange();
     }
   });
 }
 async function expenseForm(x = {}, preset = {}) {
   const isNew = !x.id;
-  const tasks = await api('/employeeworkspace/api/tasks?' + qs({ mine: S.isMgr ? '' : 1 }));
+  const tasks = await api('/workspace/api/tasks?' + qs({ mine: S.isMgr ? '' : 1 }));
   const fields = [
     { name: 'title', label: 'What was it for?', required: true, autofocus: true, placeholder: 'e.g. Cab to client office' },
     { name: 'amount', label: `Amount (${cur()})`, type: 'number', step: '0.01', min: 0, required: true, half: true, inputmode: 'decimal', placeholder: '0' },
@@ -1142,7 +1144,7 @@ async function expenseForm(x = {}, preset = {}) {
     onSubmit: async v => {
       const fd = new FormData();
       Object.entries(v).forEach(([k, val]) => { if (k === 'receipt') { if (val && val.size) fd.append('receipt', val); } else fd.append(k, val ?? ''); });
-      await api('/employeeworkspace/api/expenses' + (isNew ? '' : '/' + x.id), { method: isNew ? 'POST' : 'PUT', body: fd });
+      await api('/workspace/api/expenses' + (isNew ? '' : '/' + x.id), { method: isNew ? 'POST' : 'PUT', body: fd });
       toast(isNew ? 'Expense saved' : 'Expense updated'); await afterChange();
     }
   });
@@ -1210,7 +1212,7 @@ async function openTask(id, soft) {
   $('#drawer').classList.remove('translate-x-full'); $('#drawer-backdrop').classList.remove('hidden');
   S.drawerTask = id;
   let t;
-  try { t = await api('/employeeworkspace/api/tasks/' + id); } catch (e) { if (soft) return closeDrawer(); $('#drawer').innerHTML = `<div class="p-8 text-red-600">${esc(e.message)}</div>`; return; }
+  try { t = await api('/workspace/api/tasks/' + id); } catch (e) { if (soft) return closeDrawer(); $('#drawer').innerHTML = `<div class="p-8 text-red-600">${esc(e.message)}</div>`; return; }
   S.curTask = t;
   const mine = t.assignee_id === S.me.id;
   const canMove = S.isMgr || mine;
@@ -1282,7 +1284,7 @@ function closeDrawer() { $('#drawer').classList.add('translate-x-full'); $('#dra
 async function addComment(e, id) {
   e.preventDefault();
   const inp = $('#comment-input'); if (!inp.value.trim()) return;
-  await run(() => api(`/employeeworkspace/api/tasks/${id}/comments`, { json: { body: inp.value } }));
+  await run(() => api(`/workspace/api/tasks/${id}/comments`, { json: { body: inp.value } }));
   inp.value = ''; inp.blur(); await afterChange();
 }
 
@@ -1364,7 +1366,7 @@ const heroBtn = (onclick, icon, label, primary) => `<button onclick="${onclick}"
 async function pageDashboard() {
   if (!S.isMgr) return pageMyWork();
   setTitle('Home');
-  const d = await api('/employeeworkspace/api/dashboard');
+  const d = await api('/workspace/api/dashboard');
   const k = d.kpis, working = d.team.filter(e => e.running).length;
   const attention = k.overdue ? `${k.overdue} task${k.overdue > 1 ? 's are' : ' is'} late` : 'Nothing is late — nice work';
   $('#view').innerHTML = `
@@ -1380,7 +1382,7 @@ async function pageDashboard() {
   </div>
   ${!lsGet('wd-phone-hide') ? `<div class="card flex flex-wrap items-center gap-3 px-4 py-3 mb-6 !border-indigo-200 !bg-gradient-to-r from-indigo-50 to-white">
     <span class="kpi-ico bg-white text-indigo-600 shadow-sm">${ic('bell')}</span>
-    <div class="flex-1 min-w-[200px] text-sm"><b class="text-slate-900">Manage WorkDesk from your phone</b> <span class="text-slate-500">— give tasks, check work and get instant alerts while travelling.</span></div>
+    <div class="flex-1 min-w-[200px] text-sm"><b class="text-slate-900">Manage Intelli Workspace from your phone</b> <span class="text-slate-500">— give tasks, check work and get instant alerts while travelling.</span></div>
     <a href="#/settings" class="btn btn-primary btn-sm">Set up</a><button onclick="try{localStorage.setItem('wd-phone-hide',1)}catch(e){};this.parentElement.remove()" class="icon-btn" title="Hide">${ic('x')}</button></div>` : ''}
   ${holidayStrip(d.holidays)}
   ${alertStrips(d)}
@@ -1405,7 +1407,7 @@ async function pageDashboard() {
 
 async function pageMyWork() {
   setTitle('My Work');
-  const [tasks, d, logs] = await Promise.all([api('/employeeworkspace/api/tasks?mine=1'), api('/employeeworkspace/api/dashboard?mine=1'), api('/employeeworkspace/api/timelogs?' + qs({ mine: 1, from: todayISO(), to: todayISO() }))]);
+  const [tasks, d, logs] = await Promise.all([api('/workspace/api/tasks?mine=1'), api('/workspace/api/dashboard?mine=1'), api('/workspace/api/timelogs?' + qs({ mine: 1, from: todayISO(), to: todayISO() }))]);
   const k = d.kpis, t = myTimer();
   const open = tasks.filter(x => x.status !== 'done'), done = tasks.filter(x => x.status === 'done').slice(0, 8);
   const first = S.me.name.split(' ')[0];
@@ -1444,7 +1446,7 @@ async function pageMyWork() {
 async function pageTasks() {
   setTitle('All Tasks');
   const f = S.f.tasks;
-  const tasks = await api('/employeeworkspace/api/tasks?' + qs({ client_id: f.client_id, project_id: f.project_id, assignee_id: f.assignee_id, priority: f.priority, q: f.q, overdue: f.overdue ? 1 : '', self_added: f.self_added ? 1 : '', open: f.view === 'list' && f.open ? 1 : '' }));
+  const tasks = await api('/workspace/api/tasks?' + qs({ client_id: f.client_id, project_id: f.project_id, assignee_id: f.assignee_id, priority: f.priority, q: f.q, overdue: f.overdue ? 1 : '', self_added: f.self_added ? 1 : '', open: f.view === 'list' && f.open ? 1 : '' }));
   const sel = (key, label, list) => `<select class="field !w-auto !py-2 ${f[key] ? '!border-indigo-300 !bg-indigo-50/50' : ''}" onchange="S.f.tasks.${key}=this.value;${key === 'client_id' ? 'S.f.tasks.project_id=\'\';' : ''}render()"><option value="">${label}</option>${list.map(([v, l]) => `<option value="${v}" ${String(f[key] || '') === String(v) ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
   const filtered = f.client_id || f.project_id || f.assignee_id || f.priority || f.q || f.overdue || f.self_added;
   $('#view').innerHTML = `
@@ -1452,7 +1454,7 @@ async function pageTasks() {
     <div class="relative"><span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">${ic('search')}</span><input class="field !w-64 !pl-9 !py-2" placeholder="Search tasks…" value="${esc(f.q || '')}" onchange="S.f.tasks.q=this.value;render()"></div>
     <div class="seg">${['board', 'list'].map(v => `<button onclick="S.f.tasks.view='${v}';render()" class="${f.view === v ? 'on' : ''}">${ic(v === 'board' ? 'board' : 'list', 'w-3.5 h-3.5')}${v === 'board' ? 'Board' : 'List'}</button>`).join('')}</div>
     <div class="flex-1"></div>
-    <a href="/employeeworkspace/api/export/tasks.csv?${qs({ client_id: f.client_id, assignee_id: f.assignee_id })}" class="btn btn-ghost">${ic('download')} Export</a>
+    <a href="/workspace/api/export/tasks.csv?${qs({ client_id: f.client_id, assignee_id: f.assignee_id })}" class="btn btn-ghost">${ic('download')} Export</a>
     <button onclick="taskForm({}, {client_id:'${f.client_id && f.client_id !== 'none' ? f.client_id : ''}', project_id:'${f.project_id || ''}', assignee_id:'${f.assignee_id && f.assignee_id !== 'none' ? f.assignee_id : ''}'})" class="btn btn-primary">${ic('plus')} Give a task</button>
   </div>
   <div class="flex flex-wrap gap-2 mb-5 items-center">
@@ -1477,7 +1479,7 @@ const moneyShort = n => { if (n == null || S.perm?.hide_money) return '—'; n =
 async function pageClients() {
   setTitle('Clients');
   const view = S.f.clientsView || lsGet('wd-clients-view') || 'cards';
-  const list = await api('/employeeworkspace/api/clients');
+  const list = await api('/workspace/api/clients');
   const fyLabel = list[0]?.fy?.label || '';
   const tot = k => list.reduce((s, c) => s + (c.fy?.[k] || 0), 0);
   const seg = `<div class="seg">${[['cards', 'Cards', 'board'], ['list', 'List', 'list']].map(([k, l, i]) => `<button onclick="S.f.clientsView='${k}';try{localStorage.setItem('wd-clients-view','${k}')}catch(e){};render()" class="${view === k ? 'on' : ''}">${ic(i, 'w-3.5 h-3.5')}${l}</button>`).join('')}</div>`;
@@ -1529,7 +1531,7 @@ function clientListTable(list) {
 }
 async function clientForm(c = {}) {
   const isNew = !c.id;
-  const color = isNew ? (await api('/employeeworkspace/api/clients/next-color').catch(() => ({ color: '#0ea5e9' }))).color : c.color;
+  const color = isNew ? (await api('/workspace/api/clients/next-color').catch(() => ({ color: '#0ea5e9' }))).color : c.color;
   const fy = todayISO().slice(5, 7) >= '04' ? todayISO().slice(0, 4) + '-04-01' : (+todayISO().slice(0, 4) - 1) + '-04-01';
   openForm({
     title: isNew ? 'Add a client' : 'Edit client', icon: 'building', submit: isNew ? 'Add client' : 'Save changes',
@@ -1546,7 +1548,7 @@ async function clientForm(c = {}) {
     onSubmit: async v => {
       if (v.retainer_period === 'none') v.retainer_amount = 0;
       else if (!(+v.retainer_amount > 0)) throw new Error('Enter the retainer fee, or choose “No retainer”.');
-      const r = await api('/employeeworkspace/api/clients' + (isNew ? '' : '/' + c.id), { method: isNew ? 'POST' : 'PUT', json: v });
+      const r = await api('/workspace/api/clients' + (isNew ? '' : '/' + c.id), { method: isNew ? 'POST' : 'PUT', json: v });
       toast(isNew ? 'Client added' : 'Saved'); await loadMeta();
       if (isNew) location.hash = '#/clients/' + r.id; else await afterChange();
     }
@@ -1563,12 +1565,12 @@ function feeForm(clientId, fee = {}, preset = {}) {
       { name: 'notes', label: 'Notes', half: true, help: 'optional', placeholder: 'invoice no., remarks' }],
     onSubmit: async v => {
       if (preset.task_id) v.task_id = preset.task_id;
-      await api(isNew ? `/employeeworkspace/api/clients/${clientId}/fees` : `/employeeworkspace/api/fees/${fee.id}`, { method: isNew ? 'POST' : 'PUT', json: v });
+      await api(isNew ? `/workspace/api/clients/${clientId}/fees` : `/workspace/api/fees/${fee.id}`, { method: isNew ? 'POST' : 'PUT', json: v });
       toast(isNew ? 'Fee added' : 'Saved'); await afterChange();
     } });
 }
-async function setFeeStatus(id, status) { await run(() => api(`/employeeworkspace/api/fees/${id}`, { method: 'PUT', json: { status } }), 'Marked ' + FEE_ST[status][0].toLowerCase()); await afterChange(); }
-function deleteFee(id) { confirmBox('Delete this fee?', 'It will be removed from the client’s fees and reports.', async () => { await api('/employeeworkspace/api/fees/' + id, { method: 'DELETE' }); toast('Deleted'); await afterChange(); }); }
+async function setFeeStatus(id, status) { await run(() => api(`/workspace/api/fees/${id}`, { method: 'PUT', json: { status } }), 'Marked ' + FEE_ST[status][0].toLowerCase()); await afterChange(); }
+function deleteFee(id) { confirmBox('Delete this fee?', 'It will be removed from the client’s fees and reports.', async () => { await api('/workspace/api/fees/' + id, { method: 'DELETE' }); toast('Deleted'); await afterChange(); }); }
 function clientFeesSection(c) {
   const f = c.fy, rt = retainerText(c);
   S.feeCache = Object.fromEntries(c.fees.map(x => [x.id, x]));
@@ -1608,15 +1610,15 @@ function clientFeesSection(c) {
 
 async function renderClientDocs(cid) {
   const el = $('#client-docs'); if (!el) return;
-  const d = await api('/employeeworkspace/api/clients/' + cid + '/documents');
+  const d = await api('/workspace/api/clients/' + cid + '/documents');
   S.docCats = d.categories; S.docs = Object.fromEntries(d.items.map(x => [x.id, x]));
   const exp = x => { if (!x.expires_on) return '<span class="text-slate-400">—</span>'; const l = daysFrom(x.expires_on);
     return `<span class="${l < 0 ? 'text-red-600 font-semibold' : l <= 30 ? 'text-orange-600 font-semibold' : ''}">${fdate(x.expires_on)}${l < 0 ? ' · expired' : l <= 30 ? ` · ${l}d` : ''}</span>`; };
   el.innerHTML = `<div class="flex items-center justify-between mb-3"><h3 class="section-title">Documents</h3><button onclick="docForm(${cid})" class="btn btn-ghost btn-sm">${ic('plus')} Upload</button></div>
     ${d.items.length ? `<div class="card overflow-x-auto"><table class="tbl"><thead><tr><th>Document</th><th>Type</th><th>Expires</th><th>Added</th><th></th></tr></thead><tbody>
-    ${d.items.map(x => `<tr><td><a href="/employeeworkspace/client-docs/${esc(x.file)}" target="_blank" class="font-medium text-indigo-700 hover:underline">${esc(x.title)}</a><div class="text-xs text-slate-500">${esc(x.file_name || '')} · ${fmtBytes(x.size)}${x.notes ? ' · ' + esc(x.notes) : ''}</div></td>
+    ${d.items.map(x => `<tr><td><a href="/workspace/client-docs/${esc(x.file)}" target="_blank" class="font-medium text-indigo-700 hover:underline">${esc(x.title)}</a><div class="text-xs text-slate-500">${esc(x.file_name || '')} · ${fmtBytes(x.size)}${x.notes ? ' · ' + esc(x.notes) : ''}</div></td>
       <td>${esc(x.category)}</td><td class="whitespace-nowrap">${exp(x)}</td><td class="text-xs text-slate-500 whitespace-nowrap">${fdate(x.created_at)}${x.uploaded_by_name ? '<br>' + esc(x.uploaded_by_name) : ''}</td>
-      <td class="whitespace-nowrap text-right"><a href="/employeeworkspace/client-docs/${esc(x.file)}?download=1" class="icon-btn" title="Download">${ic('download')}</a><button onclick="docForm(${cid}, S.docs[${x.id}])" class="icon-btn" title="Edit">${ic('edit')}</button><button onclick="deleteDoc(${x.id}, ${cid})" class="icon-btn hover:!text-red-600" title="Delete">${ic('trash')}</button></td></tr>`).join('')}
+      <td class="whitespace-nowrap text-right"><a href="/workspace/client-docs/${esc(x.file)}?download=1" class="icon-btn" title="Download">${ic('download')}</a><button onclick="docForm(${cid}, S.docs[${x.id}])" class="icon-btn" title="Edit">${ic('edit')}</button><button onclick="deleteDoc(${x.id}, ${cid})" class="icon-btn hover:!text-red-600" title="Delete">${ic('trash')}</button></td></tr>`).join('')}
     </tbody></table></div>` : `<div class="card p-5">${empty('No documents yet — upload PAN, GST certificate, DSC, returns, notices…')}</div>`}`;
 }
 function docForm(cid, x = {}) {
@@ -1631,17 +1633,17 @@ function docForm(cid, x = {}) {
         if (!v.file || !v.file.size) throw new Error('Choose a file to upload');
         if (v.file.size > 4 * 1024 * 1024) throw new Error('That file is larger than 4 MB');
         const fd = new FormData(); Object.entries(v).forEach(([k, val]) => fd.append(k, val ?? ''));
-        await api('/employeeworkspace/api/clients/' + cid + '/documents', { method: 'POST', body: fd }); toast('Document uploaded');
-      } else { await api('/employeeworkspace/api/documents/' + x.id, { method: 'PUT', json: v }); toast('Saved'); }
+        await api('/workspace/api/clients/' + cid + '/documents', { method: 'POST', body: fd }); toast('Document uploaded');
+      } else { await api('/workspace/api/documents/' + x.id, { method: 'PUT', json: v }); toast('Saved'); }
       renderClientDocs(cid);
     } });
 }
 function deleteDoc(id, cid) {
   openForm({ title: 'Delete this document?', danger: true, submit: 'Delete', intro: `<p class="text-sm text-slate-600 mb-3">${esc(S.docs[id]?.title || '')} will be removed for everyone.</p>`, fields: [],
-    onSubmit: async () => { await api('/employeeworkspace/api/documents/' + id, { method: 'DELETE' }); toast('Deleted'); renderClientDocs(cid); } });
+    onSubmit: async () => { await api('/workspace/api/documents/' + id, { method: 'DELETE' }); toast('Deleted'); renderClientDocs(cid); } });
 }
 async function pageClient(id) {
-  const [c, tasks, exps, logs] = await Promise.all([api('/employeeworkspace/api/clients/' + id), api('/employeeworkspace/api/tasks?client_id=' + id), api('/employeeworkspace/api/expenses?client_id=' + id), api('/employeeworkspace/api/timelogs?client_id=' + id)]);
+  const [c, tasks, exps, logs] = await Promise.all([api('/workspace/api/clients/' + id), api('/workspace/api/tasks?client_id=' + id), api('/workspace/api/expenses?client_id=' + id), api('/workspace/api/timelogs?client_id=' + id)]);
   setTitle(c.name, 'Client' + (c.contact_person ? ' · ' + c.contact_person : ''));
   const total = c.labour_cost + c.expenses;
   S.cur = c;
@@ -1671,13 +1673,13 @@ async function pageClient(id) {
     <div class="card p-5"><h3 class="section-title !text-[15px] mb-3">Expenses by category</h3>${c.expense_by_category.length ? c.expense_by_category.map(x => `<div class="flex items-center gap-3 py-1.5 text-sm"><div class="flex-1">${esc(x.category)}<div class="mt-1">${bar(x.amount / c.expenses * 100, c.color)}</div></div><div class="font-semibold">${money(x.amount)}</div></div>`).join('') : empty('No expenses')}</div>
   </div>
   <h3 class="section-title mb-3">Tasks</h3>${taskTable(tasks, { noClient: true })}
-  <div class="flex items-center justify-between mt-8 mb-3"><h3 class="section-title">Expenses</h3><a class="btn btn-ghost btn-sm" href="/employeeworkspace/api/export/expenses.csv?client_id=${id}">${ic('download')} Export</a></div>${expenseTable(exps)}
-  <div class="flex items-center justify-between mt-8 mb-3"><h3 class="section-title">Time entries</h3><a class="btn btn-ghost btn-sm" href="/employeeworkspace/api/export/timelogs.csv?client_id=${id}">${ic('download')} Export</a></div>${timeTable(logs.slice(0, 100))}
+  <div class="flex items-center justify-between mt-8 mb-3"><h3 class="section-title">Expenses</h3><a class="btn btn-ghost btn-sm" href="/workspace/api/export/expenses.csv?client_id=${id}">${ic('download')} Export</a></div>${expenseTable(exps)}
+  <div class="flex items-center justify-between mt-8 mb-3"><h3 class="section-title">Time entries</h3><a class="btn btn-ghost btn-sm" href="/workspace/api/export/timelogs.csv?client_id=${id}">${ic('download')} Export</a></div>${timeTable(logs.slice(0, 100))}
   <div class="mt-8 pt-4 border-t border-slate-200"><button onclick="deleteClient(${id})" class="btn btn-danger btn-sm">Delete client</button></div>`;
 }
 function deleteClient(id) {
   confirmBox('Delete this client?', 'Their projects are deleted too. Tasks and expenses are kept. Tip: choose “Archived” in Edit instead to just hide them.', async () => {
-    await api('/employeeworkspace/api/clients/' + id, { method: 'DELETE' }); toast('Client deleted'); await loadMeta(); location.hash = '#/clients';
+    await api('/workspace/api/clients/' + id, { method: 'DELETE' }); toast('Client deleted'); await loadMeta(); location.hash = '#/clients';
   });
 }
 
@@ -1706,20 +1708,20 @@ function projectForm(p = {}, preset = {}) {
       { name: 'status', label: 'Status', type: 'select', half: true, options: [['active', 'Active'], ['on_hold', 'On hold'], ['completed', 'Completed']] },
       { name: 'description', label: 'Scope / notes', type: 'textarea', help: 'optional' }],
     onSubmit: async v => {
-      await api('/employeeworkspace/api/projects' + (isNew ? '' : '/' + p.id), { method: isNew ? 'POST' : 'PUT', json: v });
+      await api('/workspace/api/projects' + (isNew ? '' : '/' + p.id), { method: isNew ? 'POST' : 'PUT', json: v });
       toast(isNew ? 'Project created' : 'Saved'); await loadMeta(); await afterChange();
     }
   });
 }
 async function pageProjects() {
   setTitle('Projects');
-  const list = await api('/employeeworkspace/api/projects');
+  const list = await api('/workspace/api/projects');
   $('#view').innerHTML = `<div class="flex items-center justify-between mb-4"><div class="text-sm text-slate-500">Spent = team time cost + expenses. Red when over the cost budget.</div><button onclick="projectForm()" class="btn btn-primary">${ic('plus')} New project</button></div>${projectTable(list)}`;
 }
 
 async function pageTeam() {
   setTitle('Team');
-  const list = await api('/employeeworkspace/api/employees');
+  const list = await api('/workspace/api/employees');
   S.empCache = Object.fromEntries(list.map(e => [e.id, e]));
   $('#view').innerHTML = `
   <div class="flex items-center justify-between mb-4"><div class="text-sm text-slate-500">${list.filter(e => e.active).length} active members · each signs in with their own PIN</div><button onclick="employeeForm()" class="btn btn-primary">${ic('plus')} Add person</button></div>
@@ -1744,9 +1746,9 @@ function employeeForm(e = {}) {
   let p = {}; try { p = JSON.parse(e.permissions || '{}') || {}; } catch (_) {}
   const accessFields = S.me.role !== 'admin' ? [] : [
     { name: 'perm_sections', label: 'Sections they can open', help: 'Admins always see everything', type: 'sections', value: p.sections,
-      options: NAV.filter(n => n[0] !== 'settings').map(n => [n[0], n[1]]).concat([['expenseflow', 'ExpenseFlow']]) },
+      options: NAV.filter(n => n[0] !== 'settings').map(n => [n[0], n[1]]).concat([['expenseflow', 'Intelli Expenses']]) },
     { name: 'perm_view_only', type: 'checkbox', half: true, value: p.view_only, hint: 'View only — can look but not add, edit or delete' },
-    { name: 'perm_hide_money', type: 'checkbox', half: true, value: p.hide_money, hint: 'Hide money — no fees, costs or amounts (also closes Expenses & ExpenseFlow)' }];
+    { name: 'perm_hide_money', type: 'checkbox', half: true, value: p.hide_money, hint: 'Hide money — no fees, costs or amounts (also closes Expenses & Intelli Expenses)' }];
   openForm({
     title: isNew ? 'Add a person' : 'Edit ' + e.name, icon: 'users', sub: isNew ? 'They sign in by tapping their name and typing this PIN.' : '', submit: isNew ? 'Add person' : 'Save changes', values: { role: 'employee', color: '#' + Math.floor(Math.random() * 0xcccccc + 0x222222).toString(16), active: 1, ...e,
       designation: custom ? '__other' : (e.designation || ''), designation_other: custom ? e.designation : '' },
@@ -1766,7 +1768,7 @@ function employeeForm(e = {}) {
       delete v.designation_other;
       if ('perm_sections' in v) { v.permissions = { sections: v.perm_sections, view_only: v.perm_view_only, hide_money: v.perm_hide_money }; }
       delete v.perm_sections; delete v.perm_view_only; delete v.perm_hide_money;
-      await api('/employeeworkspace/api/employees' + (isNew ? '' : '/' + e.id), { method: isNew ? 'POST' : 'PUT', json: v });
+      await api('/workspace/api/employees' + (isNew ? '' : '/' + e.id), { method: isNew ? 'POST' : 'PUT', json: v });
       toast(isNew ? `${v.name} added — share their PIN with them` : 'Saved'); await loadMeta(); await afterChange();
     }
   });
@@ -1776,7 +1778,7 @@ function employeeForm(e = {}) {
   sel.addEventListener('change', sync); other.parentElement.classList.toggle('hidden', sel.value !== '__other');
 }
 async function pageEmployee(id) {
-  const [e, tasks, logs, exps] = await Promise.all([api('/employeeworkspace/api/employees/' + id), api('/employeeworkspace/api/tasks?assignee_id=' + id), api('/employeeworkspace/api/timelogs?employee_id=' + id), api('/employeeworkspace/api/expenses?employee_id=' + id)]);
+  const [e, tasks, logs, exps] = await Promise.all([api('/workspace/api/employees/' + id), api('/workspace/api/tasks?assignee_id=' + id), api('/workspace/api/timelogs?employee_id=' + id), api('/workspace/api/expenses?employee_id=' + id)]);
   setTitle(e.name, [e.designation, ROLE_LABEL[e.role]].filter(Boolean).join(' · '));
   S.empCache = { [e.id]: e };
   const r = e.running;
@@ -1799,13 +1801,13 @@ async function pageEmployee(id) {
     <div class="card p-5"><h3 class="section-title !text-[15px] mb-3">Time by client (all time)</h3>${e.by_client.length ? e.by_client.map(c => `<div class="flex items-center gap-2 py-1 text-sm"><span class="w-2.5 h-2.5 rounded-full" style="background:${esc(c.color || '#94a3b8')}"></span><span class="flex-1 truncate">${esc(c.name || 'Internal')}</span><b>${hrs(c.minutes)}h</b></div>`).join('') : empty('No time yet')}</div>
   </div>
   <h3 class="section-title mb-3">Tasks</h3>${taskTable(tasks)}
-  <div class="flex items-center justify-between mt-8 mb-3"><h3 class="section-title">Timesheet</h3><a class="btn btn-ghost btn-sm" href="/employeeworkspace/api/export/timelogs.csv?employee_id=${id}">${ic('download')} Export</a></div>${timeTable(logs.slice(0, 100), true)}
+  <div class="flex items-center justify-between mt-8 mb-3"><h3 class="section-title">Timesheet</h3><a class="btn btn-ghost btn-sm" href="/workspace/api/export/timelogs.csv?employee_id=${id}">${ic('download')} Export</a></div>${timeTable(logs.slice(0, 100), true)}
   <h3 class="section-title mt-8 mb-3">Expenses</h3>${expenseTable(exps)}`;
   const days = [...Array(14)].map((_, i) => shiftISO(todayISO(), i - 13));
   const map = Object.fromEntries(e.daily.map(d => [d.day, d.minutes]));
   chart('c-daily', { type: 'bar', data: { labels: days.map(d => fdate(d)), datasets: [{ data: days.map(d => +((map[d] || 0) / 60).toFixed(2)), backgroundColor: e.color, borderRadius: 4 }] }, options: { scales: { y: { title: { display: true, text: 'hours' } } } } });
 }
-async function forceStop(id) { await run(() => api(`/employeeworkspace/api/employees/${id}/stop-timer`, { method: 'POST' }), 'Timer stopped'); await afterChange(); }
+async function forceStop(id) { await run(() => api(`/workspace/api/employees/${id}/stop-timer`, { method: 'POST' }), 'Timer stopped'); await afterChange(); }
 
 // Timesheets
 function timeTable(logs, noEmp) {
@@ -1823,9 +1825,9 @@ function editLog(id) {
   const l = S.logCache[id];
   openForm({ title: 'Edit time entry', icon: 'clock', intro: `<div class="text-sm text-slate-500 mb-3">${esc(l.task_title)} · ${fdate(l.day)}</div>`, values: { minutes: l.minutes, note: l.note },
     fields: [{ name: 'minutes', label: 'Minutes', type: 'number', min: 1, required: true }, { name: 'note', label: 'Note', type: 'textarea' }],
-    onSubmit: async v => { await api('/employeeworkspace/api/timelogs/' + id, { method: 'PUT', json: v }); toast('Saved'); await afterChange(); } });
+    onSubmit: async v => { await api('/workspace/api/timelogs/' + id, { method: 'PUT', json: v }); toast('Saved'); await afterChange(); } });
 }
-function deleteLog(id) { confirmBox('Delete this time entry?', 'The hours will be removed from the task and reports.', async () => { await api('/employeeworkspace/api/timelogs/' + id, { method: 'DELETE' }); toast('Deleted'); await afterChange(); }); }
+function deleteLog(id) { confirmBox('Delete this time entry?', 'The hours will be removed from the task and reports.', async () => { await api('/workspace/api/timelogs/' + id, { method: 'DELETE' }); toast('Deleted'); await afterChange(); }); }
 
 function rangeBar(key, extra = '') {
   const f = S.f[key];
@@ -1855,13 +1857,13 @@ async function pageTimesheets() {
   const f = S.f.time;
   if (f.preset === undefined) { setRange('time', 'week'); return; }
   const params = qs({ from: f.from, to: f.to, employee_id: f.employee_id, client_id: f.client_id });
-  const logs = await api('/employeeworkspace/api/timelogs?' + params);
+  const logs = await api('/workspace/api/timelogs?' + params);
   const total = logs.reduce((s, l) => s + l.minutes, 0), cost = logs.reduce((s, l) => s + (l.cost || 0), 0);
   const byEmp = {}, byDay = {};
   logs.forEach(l => { byEmp[l.employee_name] = (byEmp[l.employee_name] || 0) + l.minutes; byDay[l.day] = (byDay[l.day] || 0) + l.minutes; });
   $('#view').innerHTML = rangeBar('time', `${S.isMgr ? filterSel('time', 'employee_id', 'Everyone', S.meta.employees.map(e => [e.id, e.name])) : ''}
     ${filterSel('time', 'client_id', 'All clients', S.meta.clients.map(c => [c.id, c.name]))}<div class="flex-1"></div>
-    <a href="/employeeworkspace/api/export/timelogs.csv?${params}" class="btn btn-ghost">${ic('download')} Export</a><button onclick="logTimeForm()" class="btn btn-primary">${ic('plus')} Add time</button>`) + `
+    <a href="/workspace/api/export/timelogs.csv?${params}" class="btn btn-ghost">${ic('download')} Export</a><button onclick="logTimeForm()" class="btn btn-primary">${ic('plus')} Add time</button>`) + `
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
     ${kpi('Total time', hm(total), `${logs.length} entries`)}${kpi('Days worked', Object.keys(byDay).length, `avg ${hm(total / (Object.keys(byDay).length || 1))}/day`)}
     ${S.isMgr ? kpi('Team time cost', money(cost)) + kpi('People', Object.keys(byEmp).length) : ''}
@@ -1876,7 +1878,7 @@ function expenseTable(list) {
   return `<div class="card overflow-x-auto"><table class="tbl"><thead><tr><th>Date</th><th>Expense</th><th>Client / project</th><th>Spent by</th><th>Status</th><th class="num">Amount</th><th></th></tr></thead><tbody>
   ${list.map(x => { const canEdit = S.isMgr || (x.employee_id === S.me.id && x.status === 'pending'); return `<tr>
     <td class="whitespace-nowrap">${fdate(x.date)}</td>
-    <td><div class="font-medium">${esc(x.title)}</div><div class="text-xs text-slate-500">${esc(x.category)}${x.billable ? ' · billable' : ''}${x.task_title ? ' · ' + esc(x.task_title) : ''}${x.receipt_file ? ` · <a href="/employeeworkspace/receipts/${esc(x.receipt_file)}" target="_blank" class="text-indigo-600 hover:underline">${ic('clip', 'w-3 h-3 inline')} receipt</a>` : ''}</div></td>
+    <td><div class="font-medium">${esc(x.title)}</div><div class="text-xs text-slate-500">${esc(x.category)}${x.billable ? ' · billable' : ''}${x.task_title ? ' · ' + esc(x.task_title) : ''}${x.receipt_file ? ` · <a href="/workspace/receipts/${esc(x.receipt_file)}" target="_blank" class="text-indigo-600 hover:underline">${ic('clip', 'w-3 h-3 inline')} receipt</a>` : ''}</div></td>
     <td>${clientChip(x.client_name, x.client_color)}${x.project_name ? `<div class="text-xs text-slate-400">${esc(x.project_name)}</div>` : ''}</td>
     <td class="text-sm">${esc(x.employee_name || '—')}</td>
     <td>${expPill(x.status)}</td><td class="num font-semibold">${money(x.amount)}</td>
@@ -1885,26 +1887,26 @@ function expenseTable(list) {
       ${canEdit ? `<button onclick="expenseForm(S.expCache[${x.id}])" class="icon-btn" title="Edit">${ic('edit')}</button><button onclick="deleteExp(${x.id})" class="icon-btn hover:!text-red-600" title="Delete">${ic('trash')}</button>` : ''}</td></tr>`; }).join('')}
   </tbody></table></div>`;
 }
-async function setExp(id, status) { await run(() => api('/employeeworkspace/api/expenses/' + id, { method: 'PUT', json: { status } }), 'Marked as ' + (EXP_LABEL[status] || status).toLowerCase()); await afterChange(); }
-function deleteExp(id) { confirmBox('Delete this expense?', 'The expense and its receipt will be removed.', async () => { await api('/employeeworkspace/api/expenses/' + id, { method: 'DELETE' }); toast('Deleted'); await afterChange(); }); }
+async function setExp(id, status) { await run(() => api('/workspace/api/expenses/' + id, { method: 'PUT', json: { status } }), 'Marked as ' + (EXP_LABEL[status] || status).toLowerCase()); await afterChange(); }
+function deleteExp(id) { confirmBox('Delete this expense?', 'The expense and its receipt will be removed.', async () => { await api('/workspace/api/expenses/' + id, { method: 'DELETE' }); toast('Deleted'); await afterChange(); }); }
 
 async function pageExpenses() {
   setTitle(S.isMgr ? 'Expenses' : 'My Expenses');
   const f = S.f.exp;
   if (f.preset === undefined) { setRange('exp', 'month'); return; }
   const params = qs({ from: f.from, to: f.to, employee_id: f.employee_id, client_id: f.client_id, status: f.status, category: f.category });
-  const list = await api('/employeeworkspace/api/expenses?' + params);
+  const list = await api('/workspace/api/expenses?' + params);
   const sum = st => list.filter(x => !st || x.status === st).reduce((s, x) => s + x.amount, 0);
   $('#view').innerHTML = rangeBar('exp', `
     ${filterSel('exp', 'client_id', 'All clients', [['none', 'Office (no client)'], ...S.meta.clients.map(c => [c.id, c.name])])}
     ${S.isMgr ? filterSel('exp', 'employee_id', 'Everyone', S.meta.employees.map(e => [e.id, e.name])) : ''}
     ${filterSel('exp', 'status', 'Any status', S.meta.expense_statuses.map(s => [s, EXP_LABEL[s]]))}
     ${filterSel('exp', 'category', 'Any category', S.meta.expense_categories.map(c => [c, c]))}
-    <div class="flex-1"></div>${S.isMgr ? `<button onclick="importDialog('expenses')" class="btn btn-ghost">${ic('download', 'w-4 h-4 rotate-180')} Import</button>` : ''}<a href="/employeeworkspace/api/export/expenses.csv?${params}" class="btn btn-ghost">${ic('download')} Export</a><button onclick="scanDialog()" class="btn btn-go">${ic('scan')} Scan invoices</button><button onclick="expenseForm()" class="btn btn-primary">${ic('plus')} Add expense</button>`) + `
+    <div class="flex-1"></div>${S.isMgr ? `<button onclick="importDialog('expenses')" class="btn btn-ghost">${ic('download', 'w-4 h-4 rotate-180')} Import</button>` : ''}<a href="/workspace/api/export/expenses.csv?${params}" class="btn btn-ghost">${ic('download')} Export</a><button onclick="scanDialog()" class="btn btn-go">${ic('scan')} Scan invoices</button><button onclick="expenseForm()" class="btn btn-primary">${ic('plus')} Add expense</button>`) + `
   <div ondragover="event.preventDefault();this.classList.add('!border-emerald-400','!bg-emerald-50')" ondragleave="this.classList.remove('!border-emerald-400','!bg-emerald-50')" ondrop="event.preventDefault();this.classList.remove('!border-emerald-400','!bg-emerald-50');scanDialog([...event.dataTransfer.files])" onclick="scanDialog()"
     class="card mb-5 px-5 py-4 flex items-center gap-4 cursor-pointer border-2 border-dashed !border-slate-200 hover:!border-emerald-300 hover:!bg-emerald-50/40 transition">
     <span class="kpi-ico bg-emerald-50 text-emerald-600">${ic('scan')}</span>
-    <div class="flex-1 min-w-0"><div class="font-bold text-slate-900">Drop invoices here to add them automatically</div><div class="text-sm text-slate-500">PDF, photo or scan — WorkDesk reads the vendor, date, amount and type. You just pick the client.</div></div>
+    <div class="flex-1 min-w-0"><div class="font-bold text-slate-900">Drop invoices here to add them automatically</div><div class="text-sm text-slate-500">PDF, photo or scan — Intelli Workspace reads the vendor, date, amount and type. You just pick the client.</div></div>
     <span class="hidden sm:inline text-sm font-semibold text-emerald-700">Choose files →</span></div>` + `
   <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
     ${kpi('Total spent', money(sum() - sum('rejected')), `${list.length} entries`)}${kpi('Waiting approval', money(sum('pending')), '', 'text-amber-600')}
@@ -1917,13 +1919,13 @@ async function pageReports() {
   setTitle('Reports');
   const f = S.f.rep;
   if (f.preset === undefined) { setRange('rep', 'month'); return; }
-  const d = await api('/employeeworkspace/api/reports?' + qs({ from: f.from || '2000-01-01', to: f.to || todayISO() }));
+  const d = await api('/workspace/api/reports?' + qs({ from: f.from || '2000-01-01', to: f.to || todayISO() }));
   const rq = qs({ from: f.from, to: f.to });
   const clients = d.by_client.filter(c => c.minutes || c.expenses || c.open_tasks || c.tasks_done || c.fees);
   const tot = k => d.by_client.reduce((s, c) => s + c[k], 0);
   const matrixClients = [...new Set(d.matrix.map(m => m.client_id))];
   const cname = id => id ? (S.meta.clients.find(c => c.id === id)?.name || '?') : 'Internal';
-  $('#view').innerHTML = rangeBar('rep', `<div class="flex-1"></div><a class="btn btn-ghost" href="/employeeworkspace/api/export/timelogs.csv?${rq}">${ic('download')} Time sheet</a><a class="btn btn-ghost" href="/employeeworkspace/api/export/expenses.csv?${rq}">${ic('download')} Expenses</a>`) + `
+  $('#view').innerHTML = rangeBar('rep', `<div class="flex-1"></div><a class="btn btn-ghost" href="/workspace/api/export/timelogs.csv?${rq}">${ic('download')} Time sheet</a><a class="btn btn-ghost" href="/workspace/api/export/expenses.csv?${rq}">${ic('download')} Expenses</a>`) + `
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">${kpi('Hours worked', hrs(tot('minutes')))}${kpi('Team time cost', money(tot('labour_cost')))}${kpi('Expenses', money(tot('expenses')), `${money(tot('billable_expenses'))} billable`)}${kpi('Tasks completed', tot('tasks_done'))}</div>
 
   <h3 class="section-title mb-3">Client-wise</h3>
@@ -1980,7 +1982,7 @@ async function pageCompliance() {
   let from, to;
   if (f.view === 'calendar') { from = f.month + '-01'; const [y, m] = f.month.split('-').map(Number); to = `${f.month}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`; }
   else { from = shiftISO(todayISO(), -45); to = shiftISO(todayISO(), 120); }
-  const d = await api('/employeeworkspace/api/compliance?' + qs({ from, to, category: f.category, client_id: f.client_id, mine: f.mine ? 1 : '' }));
+  const d = await api('/workspace/api/compliance?' + qs({ from, to, category: f.category, client_id: f.client_id, mine: f.mine ? 1 : '' }));
   S.compItems = Object.fromEntries(d.items.map(c => [c.id, c]));
   const st = d.stats;
   const chips = ['', ...d.categories].map(c => `<button onclick="S.f.comp.category='${c}';render()" class="px-3 py-1.5 rounded-xl text-xs font-bold border transition ${(f.category || '') === c ? 'text-white border-transparent shadow-sm' : 'bg-white border-[var(--line)] text-slate-600 hover:border-slate-300'}" style="${(f.category || '') === c ? `background:${c ? COMP_COLOR[c] : '#1e2235'}` : ''}">${c || 'All'}</button>`).join('');
@@ -2081,14 +2083,14 @@ function compFileForm(id) {
   const c = S.compItems[id];
   openForm({ title: 'Mark as filed', icon: 'checkc', sub: esc(compLabel(c)) + (c.client_name ? ' — ' + esc(c.client_name) : ''), submit: 'Mark filed', values: { filed_on: todayISO() },
     fields: [{ name: 'filed_on', label: 'Filed on', type: 'date', required: true, half: true }, { name: 'note', label: 'ARN / acknowledgement no.', half: true, help: 'optional' }],
-    onSubmit: async v => { await api(`/employeeworkspace/api/compliance/${id}/status`, { json: { status: 'filed', ...v } }); toast('Marked as filed'); await afterChange(); } });
+    onSubmit: async v => { await api(`/workspace/api/compliance/${id}/status`, { json: { status: 'filed', ...v } }); toast('Marked as filed'); await afterChange(); } });
 }
-async function compReopen(id) { await run(() => api(`/employeeworkspace/api/compliance/${id}/status`, { json: { status: 'pending' } }), 'Marked as not filed'); closeModal(); await afterChange(); }
+async function compReopen(id) { await run(() => api(`/workspace/api/compliance/${id}/status`, { json: { status: 'pending' } }), 'Marked as not filed'); closeModal(); await afterChange(); }
 function compDelete(id) {
   const c = S.compItems[id];
   openForm({ title: 'Delete this due date?', danger: true, submit: 'Delete', fields: c.series && c.recur !== 'none' ? [{ name: 'future', type: 'checkbox', hint: 'Also delete all later repeats of this item' }] : [],
     intro: `<p class="text-sm text-slate-600 -mt-2 mb-3">${esc(compLabel(c))} · ${fdate(c.due_date)}</p>`,
-    onSubmit: async v => { await api(`/employeeworkspace/api/compliance/${id}` + (v.future ? '?future=1' : ''), { method: 'DELETE' }); toast('Deleted'); await afterChange(); } });
+    onSubmit: async v => { await api(`/workspace/api/compliance/${id}` + (v.future ? '?future=1' : ''), { method: 'DELETE' }); toast('Deleted'); await afterChange(); } });
 }
 function complianceForm(c = {}, preset = {}) {
   const isNew = !c.id;
@@ -2102,11 +2104,11 @@ function complianceForm(c = {}, preset = {}) {
       { name: 'period', label: 'Period', half: true, help: 'optional', placeholder: 'e.g. Sep 2026, Q2' },
       ...(isNew ? [{ name: 'recur', label: 'Repeats', type: 'select', half: true, options: [['none', 'Does not repeat'], ['monthly', 'Every month'], ['quarterly', 'Every quarter'], ['yearly', 'Every year']] }] : []),
       { name: 'notes', label: 'Notes', type: 'textarea', rows: 2, help: 'optional' }],
-    onSubmit: async v => { await api('/employeeworkspace/api/compliance' + (isNew ? '' : '/' + c.id), { method: isNew ? 'POST' : 'PUT', json: v }); toast(isNew ? 'Due date added' : 'Saved'); await afterChange(); } });
+    onSubmit: async v => { await api('/workspace/api/compliance' + (isNew ? '' : '/' + c.id), { method: isNew ? 'POST' : 'PUT', json: v }); toast(isNew ? 'Due date added' : 'Saved'); await afterChange(); } });
 }
 async function compPreset() {
   confirmBox('Add standard due dates?', 'Adds the usual statutory dates for the next 12 months — GSTR-1 (11th), GSTR-3B (20th), TDS deposit (7th), PF & ESI (15th), quarterly TDS returns, advance tax, ITR, tax audit and GSTR-9. Dates already added are skipped. You can edit or delete any of them.', async () => {
-    const r = await api('/employeeworkspace/api/compliance/preset', { json: {} }); toast(r.added ? `Added ${r.added} due dates` : 'Already up to date'); await afterChange();
+    const r = await api('/workspace/api/compliance/preset', { json: {} }); toast(r.added ? `Added ${r.added} due dates` : 'Already up to date'); await afterChange();
   }, 'Add dates');
 }
 function complianceStrip(list, overdue) {
@@ -2151,7 +2153,7 @@ async function doPunch(action, confirmed) {
   if (action === 'in' && a.closed && !confirmed) {
     return confirmBox('Office is closed today', `Today is ${a.holiday ? esc(a.holiday) + ' (holiday)' : 'a ' + WEEKDAY(a.day)}. Punch in anyway?`, async () => { await doPunch('in', true); }, 'Punch in anyway');
   }
-  const r = await run(() => api('/employeeworkspace/api/attendance/punch', { json: { action } }), action === 'in' ? 'Punched in — have a good day!' : 'Punched out — see you tomorrow!');
+  const r = await run(() => api('/workspace/api/attendance/punch', { json: { action } }), action === 'in' ? 'Punched in — have a good day!' : 'Punched out — see you tomorrow!');
   renderPunch(r);
   if (location.hash.split('/')[1] === 'attendance') render(true);
 }
@@ -2183,7 +2185,7 @@ function monthNav(onchangeJs) {
 const legend = () => `<div class="flex flex-wrap gap-x-4 gap-y-2 text-xs text-slate-600">${['present', 'late', 'half', 'leave', 'absent', 'holiday', 'weekend'].map(k => `<span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded ${ATT[k][1]}"></span>${ATT[k][0]}</span>`).join('')}</div>`;
 
 async function attMe(bar) {
-  const [a, m, hol] = await Promise.all([api('/employeeworkspace/api/attendance/me'), api('/employeeworkspace/api/attendance/month?' + qs({ month: S.f.att.month, employee_id: S.me.id })), api('/employeeworkspace/api/holidays?year=' + todayISO().slice(0, 4))]);
+  const [a, m, hol] = await Promise.all([api('/workspace/api/attendance/me'), api('/workspace/api/attendance/month?' + qs({ month: S.f.att.month, employee_id: S.me.id })), api('/workspace/api/holidays?year=' + todayISO().slice(0, 4))]);
   renderPunch(a);
   const s = m.summary, first = S.me.name.split(' ')[0];
   const big = a.in_since
@@ -2244,7 +2246,7 @@ function holidayRow(h) {
     ${S.isMgr && h.id ? `<button onclick="deleteHoliday(${h.id}, '${esc(h.name).replace(/'/g, "\\'")}')" class="icon-btn hover:!text-red-600" title="Remove">${ic('trash')}</button>` : ''}</div>`;
 }
 async function leaveForm(day) {
-  const L = await api('/employeeworkspace/api/leave-requests?mine=1');
+  const L = await api('/workspace/api/leave-requests?mine=1');
   const bal = Object.fromEntries(L.mine.map(b => [b.type, b]));
   const label = t => L.types[t] + (bal[t] && bal[t].left != null ? ` — ${Math.max(bal[t].left - bal[t].pending, 0)} left` : '');
   openForm({
@@ -2255,7 +2257,7 @@ async function leaveForm(day) {
       { name: 'kind', label: 'Full or half day', type: 'select', half: true, options: [['full', 'Full day(s)'], ['half', 'Half day (one date only)']] },
       { name: 'reason', label: 'Reason', help: 'optional', placeholder: 'e.g. Family function' }],
     onSubmit: async v => {
-      const r = await api('/employeeworkspace/api/leave-requests', { json: v });
+      const r = await api('/workspace/api/leave-requests', { json: v });
       toast(r.status === 'approved' ? 'Leave saved' : 'Leave request sent'); location.hash = '#/attendance/leave'; await afterChange();
     }
   });
@@ -2280,7 +2282,7 @@ function leaveRow(r, mgrView) {
     ${pill(pl, pc)}<div class="flex gap-2">${acts.join('')}</div></div>`;
 }
 async function attLeave(bar) {
-  const d = await api('/employeeworkspace/api/leave-requests');
+  const d = await api('/workspace/api/leave-requests');
   const mgrView = !!d.balances, pending = d.items.filter(r => r.status === 'pending');
   const mine = mgrView ? d.items.filter(r => r.employee_id === S.me.id) : d.items;
   $('#view').innerHTML = bar + `
@@ -2299,14 +2301,14 @@ async function decideLeave(id, action) {
   const verb = { approve: 'Approve', reject: 'Reject', cancel: 'Cancel' }[action];
   openForm({ title: verb + ' this leave?', icon: 'calendar', submit: verb, danger: action !== 'approve',
     fields: [{ name: 'note', label: action === 'reject' ? 'Reason (shown to them)' : 'Note', help: 'optional' }],
-    onSubmit: async v => { await api('/employeeworkspace/api/leave-requests/' + id, { method: 'PUT', json: { action, note: v.note } }); toast('Leave ' + { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }[action]); await afterChange(); } });
+    onSubmit: async v => { await api('/workspace/api/leave-requests/' + id, { method: 'PUT', json: { action, note: v.note } }); toast('Leave ' + { approve: 'approved', reject: 'rejected', cancel: 'cancelled' }[action]); await afterChange(); } });
 }
 async function attSalary(bar) {
-  const d = await api('/employeeworkspace/api/attendance/salary?' + qs({ month: S.f.att.month }));
+  const d = await api('/workspace/api/attendance/salary?' + qs({ month: S.f.att.month }));
   const f = n => Number.isInteger(n) ? n : n.toFixed(1);
   $('#view').innerHTML = bar + `
   <div class="card p-5 overflow-x-auto">
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">${monthNav()}<a href="/employeeworkspace/api/export/salary.xlsx?month=${d.month}" class="btn btn-ghost btn-sm">${ic('download')} Download Excel</a></div>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">${monthNav()}<a href="/workspace/api/export/salary.xlsx?month=${d.month}" class="btn btn-ghost btn-sm">${ic('download')} Download Excel</a></div>
     ${d.partial ? `<div class="text-xs text-amber-800 bg-amber-50 rounded-xl p-3 mb-4">This month isn't over yet — days still ahead are counted as paid. Check again after month-end.</div>` : ''}
     <table class="tbl"><thead><tr><th>Person</th><th class="num">Present</th><th class="num">Late</th><th class="num">Paid leave</th><th class="num">Unpaid (LOP)</th><th class="num">Absent</th><th class="num">Paid days</th><th class="num">Monthly salary</th><th class="num">Payable</th></tr></thead><tbody>
     ${d.rows.map(r => `<tr><td><div class="font-medium">${esc(r.name)}</div><div class="text-xs text-slate-500">${esc(r.designation || '')}</div></td>
@@ -2318,7 +2320,7 @@ async function attSalary(bar) {
 }
 
 async function attToday(bar) {
-  const d = await api('/employeeworkspace/api/attendance/today');
+  const d = await api('/workspace/api/attendance/today');
   S.attPeople = Object.fromEntries(d.people.map(p => [p.id, p]));
   const count = st => d.people.filter(p => st.includes(p.status)).length;
   const inNow = d.people.filter(p => p.in_since).length;
@@ -2343,14 +2345,14 @@ async function attToday(bar) {
   }).join('')}</div>`;
 }
 async function attRegister(bar) {
-  const d = await api('/employeeworkspace/api/attendance/month?' + qs({ month: S.f.att.month }));
+  const d = await api('/workspace/api/attendance/month?' + qs({ month: S.f.att.month }));
   S.attReg = d;
   const days = d.register[0]?.days || [];
   const today = todayISO();
   $('#view').innerHTML = bar + `
   <div class="card p-5">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-4">${monthNav()}
-      <div class="flex items-center gap-2"><a href="/employeeworkspace/api/export/attendance.csv?month=${S.f.att.month}" class="btn btn-ghost btn-sm">${ic('download')} Export (Excel)</a></div></div>
+      <div class="flex items-center gap-2"><a href="/workspace/api/export/attendance.csv?month=${S.f.att.month}" class="btn btn-ghost btn-sm">${ic('download')} Export (Excel)</a></div></div>
     <div class="overflow-x-auto scroll-thin -mx-5 px-5"><table class="text-xs border-separate" style="border-spacing:3px">
       <thead><tr><th class="sticky left-0 bg-white z-10 text-left font-bold text-slate-500 pr-3 min-w-[150px]">Person</th>
         <th class="px-1.5 font-bold text-emerald-700" title="Days present">Present</th><th class="px-1.5 font-bold text-rose-600" title="Days absent">Absent</th><th class="px-1.5 font-bold text-amber-700" title="Leave days">Leave</th><th class="px-1.5 font-bold text-orange-600" title="Late arrivals">Late</th><th class="px-1.5 pr-3 font-bold text-slate-600 border-r border-[var(--line)]" title="Hours in office">Hours</th>
@@ -2365,7 +2367,7 @@ async function attRegister(bar) {
   </div>`;
 }
 async function attEditForm(eid, day) {
-  const m = await api('/employeeworkspace/api/attendance/month?' + qs({ month: day.slice(0, 7), employee_id: eid }));
+  const m = await api('/workspace/api/attendance/month?' + qs({ month: day.slice(0, 7), employee_id: eid }));
   const d = m.days.find(x => x.day === day);
   const person = S.meta.employees.find(e => e.id === eid) || {};
   openForm({
@@ -2379,13 +2381,13 @@ async function attEditForm(eid, day) {
       { name: 'clear_times', type: 'checkbox', hint: 'Remove punch times for this day (mark as not present)' }],
     onSubmit: async v => {
       if (v.clear_times) { v.in_time = ''; v.out_time = ''; }
-      await api('/employeeworkspace/api/attendance/day', { method: 'PUT', json: { ...v, employee_id: eid, day } }); toast('Attendance updated'); await afterChange();
+      await api('/workspace/api/attendance/day', { method: 'PUT', json: { ...v, employee_id: eid, day } }); toast('Attendance updated'); await afterChange();
     }
   });
 }
 async function attHolidays(bar) {
   const year = S.f.att.year || +todayISO().slice(0, 4);
-  const list = await api('/employeeworkspace/api/holidays?year=' + year);
+  const list = await api('/workspace/api/holidays?year=' + year);
   $('#view').innerHTML = bar + `
   <div class="grid lg:grid-cols-[1fr_340px] gap-4 items-start">
     <div class="card p-5">
@@ -2407,10 +2409,10 @@ async function attHolidays(bar) {
 function holidayForm() {
   openForm({ title: 'Add a holiday', icon: 'calendar', sub: 'Everyone will see it, and it will not count as an absence.', submit: 'Add holiday',
     fields: [{ name: 'day', label: 'Date', type: 'date', required: true, half: true }, { name: 'name', label: 'Holiday name', required: true, half: true, placeholder: 'e.g. Diwali' }],
-    onSubmit: async v => { await api('/employeeworkspace/api/holidays', { json: v }); toast('Holiday added'); await afterChange(); } });
+    onSubmit: async v => { await api('/workspace/api/holidays', { json: v }); toast('Holiday added'); await afterChange(); } });
 }
-async function addNationalHolidays(year) { const r = await run(() => api('/employeeworkspace/api/holidays/preset', { json: { year } })); toast(r.added ? `Added ${r.added} national holidays` : 'Already added'); await afterChange(); }
-function deleteHoliday(id, name) { confirmBox(`Remove ${name}?`, 'The office will be treated as open on that day.', async () => { await api('/employeeworkspace/api/holidays/' + id, { method: 'DELETE' }); toast('Holiday removed'); await afterChange(); }, 'Remove'); }
+async function addNationalHolidays(year) { const r = await run(() => api('/workspace/api/holidays/preset', { json: { year } })); toast(r.added ? `Added ${r.added} national holidays` : 'Already added'); await afterChange(); }
+function deleteHoliday(id, name) { confirmBox(`Remove ${name}?`, 'The office will be treated as open on that day.', async () => { await api('/workspace/api/holidays/' + id, { method: 'DELETE' }); toast('Holiday removed'); await afterChange(); }, 'Remove'); }
 
 // ─── Notes: sticky notes + notepad ───────────────────────────────────────────
 const STICKY = { yellow: ['#fef9c3', '#fde047', '#713f12'], pink: ['#fce7f3', '#f9a8d4', '#831843'], green: ['#dcfce7', '#86efac', '#14532d'],
@@ -2419,7 +2421,7 @@ const NOTES = { mine: [], shared: [], timers: {}, page: null };
 async function pageNotes(tab) {
   setTitle('Notes', 'Your sticky notes and notepad — private unless you share them');
   tab = tab === 'notepad' ? 'notepad' : 'sticky';
-  const d = await api('/employeeworkspace/api/notes'); NOTES.mine = d.mine; NOTES.shared = d.shared;
+  const d = await api('/workspace/api/notes'); NOTES.mine = d.mine; NOTES.shared = d.shared;
   const bar = `<div class="seg mb-6">${[['sticky', 'Sticky notes'], ['notepad', 'Notepad']].map(([k, l]) => `<button onclick="location.hash='#/notes/${k}'" class="${k === tab ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   $('#view').innerHTML = bar + (tab === 'notepad' ? notepadView() : stickyView());
   if (tab === 'notepad') openNotePage(NOTES.page && NOTES.mine.some(n => n.id === NOTES.page) ? NOTES.page : (NOTES.mine.find(n => n.kind === 'page') || {}).id);
@@ -2454,7 +2456,7 @@ function stickyView() {
 }
 async function quickSticky(form) {
   const body = form.q.value.trim(); if (!body) return;
-  await api('/employeeworkspace/api/notes', { json: { body, color: form.color?.value || 'yellow' } });
+  await api('/workspace/api/notes', { json: { body, color: form.color?.value || 'yellow' } });
   form.q.value = ''; render(true);
 }
 function queueNoteSave(id, patch, now) {
@@ -2462,12 +2464,12 @@ function queueNoteSave(id, patch, now) {
   clearTimeout(NOTES.timers[id]);
   const st = $('#note-status'); if (st) st.textContent = 'Saving…';
   NOTES.timers[id] = setTimeout(async () => {
-    try { await api('/employeeworkspace/api/notes/' + id, { method: 'PUT', json: patch }); if (st) st.textContent = 'Saved ✓'; const t = document.querySelector(`[data-note-time="${id}"]`); if (t) t.textContent = 'just now'; }
+    try { await api('/workspace/api/notes/' + id, { method: 'PUT', json: patch }); if (st) st.textContent = 'Saved ✓'; const t = document.querySelector(`[data-note-time="${id}"]`); if (t) t.textContent = 'just now'; }
     catch (e) { if (st) st.textContent = 'Not saved — ' + e.message; }
   }, now ? 0 : 600);
 }
-async function saveNote(id, patch, rerender) { await api('/employeeworkspace/api/notes/' + id, { method: 'PUT', json: patch }); if (patch.shared !== undefined) toast(patch.shared ? 'Shared with the team' : 'Now private'); if (rerender) render(true); }
-function deleteNote(id) { confirmBox('Delete this note?', 'This can’t be undone.', async () => { await api('/employeeworkspace/api/notes/' + id, { method: 'DELETE' }); if (NOTES.page === id) NOTES.page = null; toast('Note deleted'); render(true); }); }
+async function saveNote(id, patch, rerender) { await api('/workspace/api/notes/' + id, { method: 'PUT', json: patch }); if (patch.shared !== undefined) toast(patch.shared ? 'Shared with the team' : 'Now private'); if (rerender) render(true); }
+function deleteNote(id) { confirmBox('Delete this note?', 'This can’t be undone.', async () => { await api('/workspace/api/notes/' + id, { method: 'DELETE' }); if (NOTES.page === id) NOTES.page = null; toast('Note deleted'); render(true); }); }
 function notepadView() {
   const pages = NOTES.mine.filter(n => n.kind === 'page'), shared = NOTES.shared.filter(n => n.kind === 'page');
   return `<div class="card !rounded-3xl overflow-hidden flex flex-col md:flex-row" style="min-height:calc(100dvh - 240px)">
@@ -2499,7 +2501,7 @@ function openNotePage(id, readOnly) {
     <textarea ${own ? '' : 'readonly'} placeholder="Start writing… (saves automatically)" oninput="queueNoteSave(${p.id},{body:this.value});$('#note-words').textContent=(this.value.trim().split(/\\s+/).filter(Boolean).length)+' words'" class="note-lines flex-1 min-h-[50vh] px-5 sm:px-8 py-4 text-[15.5px] leading-7 text-slate-700 bg-transparent outline-none resize-none" style="background-image:linear-gradient(transparent 27px, #eef0f6 28px);background-size:100% 28px;background-attachment:local">${esc(p.body || '')}</textarea>
     <div class="px-5 sm:px-8 py-2 border-t border-[var(--line)] text-xs text-slate-400 flex justify-between"><span id="note-words">${(p.body || '').trim().split(/\s+/).filter(Boolean).length} words</span><span>Last edited ${ago(p.updated_at)}</span></div>`;
 }
-async function newNotePage() { const r = await api('/employeeworkspace/api/notes', { json: { kind: 'page', title: '' } }); NOTES.page = r.note.id; location.hash === '#/notes/notepad' ? render(true) : (location.hash = '#/notes/notepad'); setTimeout(() => document.querySelector('#note-editor input')?.focus(), 400); }
+async function newNotePage() { const r = await api('/workspace/api/notes', { json: { kind: 'page', title: '' } }); NOTES.page = r.note.id; location.hash === '#/notes/notepad' ? render(true) : (location.hash = '#/notes/notepad'); setTimeout(() => document.querySelector('#note-editor input')?.focus(), 400); }
 
 // ─── Suggestion box ──────────────────────────────────────────────────────────
 const SUG_ST = { new: ['New', 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200'], review: ['Under review', 'bg-amber-50 text-amber-800 ring-1 ring-amber-200'],
@@ -2507,7 +2509,7 @@ const SUG_ST = { new: ['New', 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-2
 const SUG_ICON = { 'Idea': '💡', 'Concern': '⚠️', 'Process improvement': '⚙️', 'Other': '💬' };
 async function pageSuggestions() {
   setTitle('Suggestion Box', S.isMgr ? 'Ideas and concerns from the team — reply and keep them posted' : 'Share an idea or bring something to our notice');
-  const d = await api('/employeeworkspace/api/suggestions');
+  const d = await api('/workspace/api/suggestions');
   const f = S.f.sug = S.f.sug || { status: '' };
   const list = d.items.filter(s => !f.status || s.status === f.status);
   const form = `<div class="card p-5 sm:p-6 ${d.manager ? '' : 'mb-8'}">
@@ -2549,17 +2551,17 @@ async function pageSuggestions() {
 async function sendSuggestion(e) {
   e.preventDefault();
   const fd = new FormData(e.target);
-  await run(() => api('/employeeworkspace/api/suggestions', { json: { category: fd.get('category'), title: fd.get('title'), body: fd.get('body'), anonymous: fd.get('anonymous') ? 1 : 0 } }), fd.get('anonymous') ? 'Sent anonymously — thank you!' : 'Suggestion sent — thank you!');
+  await run(() => api('/workspace/api/suggestions', { json: { category: fd.get('category'), title: fd.get('title'), body: fd.get('body'), anonymous: fd.get('anonymous') ? 1 : 0 } }), fd.get('anonymous') ? 'Sent anonymously — thank you!' : 'Suggestion sent — thank you!');
   e.target.reset(); render(true);
 }
-async function respondSuggestion(id, patch) { await run(() => api('/employeeworkspace/api/suggestions/' + id, { method: 'PUT', json: patch }), 'Updated — they’ve been notified'); render(true); }
+async function respondSuggestion(id, patch) { await run(() => api('/workspace/api/suggestions/' + id, { method: 'PUT', json: patch }), 'Updated — they’ve been notified'); render(true); }
 function replyForm(id) {
   const s = S.sugCache[id];
   openForm({ title: 'Reply to suggestion', icon: 'message', sub: esc(s.title) + (s.anonymous ? ' · the sender stays anonymous' : ''), submit: 'Send reply', values: { reply: s.reply || '', status: s.status === 'new' ? 'review' : s.status },
     fields: [{ name: 'reply', label: 'Your reply', type: 'textarea', rows: 4, required: true, autofocus: true }, { name: 'status', label: 'Status', type: 'select', options: Object.entries(SUG_ST).map(([k, v]) => [k, v[0]]) }],
-    onSubmit: async v => { await api('/employeeworkspace/api/suggestions/' + id, { method: 'PUT', json: v }); toast('Reply sent'); render(true); } });
+    onSubmit: async v => { await api('/workspace/api/suggestions/' + id, { method: 'PUT', json: v }); toast('Reply sent'); render(true); } });
 }
-function deleteSuggestion(id) { confirmBox('Remove this suggestion?', 'It will be deleted permanently.', async () => { await api('/employeeworkspace/api/suggestions/' + id, { method: 'DELETE' }); toast('Removed'); render(true); }, 'Remove'); }
+function deleteSuggestion(id) { confirmBox('Remove this suggestion?', 'It will be deleted permanently.', async () => { await api('/workspace/api/suggestions/' + id, { method: 'DELETE' }); toast('Removed'); render(true); }, 'Remove'); }
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
 const C = { cid: null, list: [], people: [], msgs: [], lastId: 0, othersRead: 0, q: '', timer: null, file: null, busy: false };
@@ -2586,7 +2588,7 @@ const previewText = m => !m ? '' : m.deleted ? '🚫 Message deleted' : m.file_t
 async function pageChat(cid) {
   setTitle('Chat');
   C.cid = cid || null;
-  const d = await api('/employeeworkspace/api/chat/conversations');
+  const d = await api('/workspace/api/chat/conversations');
   C.list = d.conversations; C.people = d.people;
   $('#view').innerHTML = `
   <div class="card !rounded-3xl overflow-hidden flex" style="height:calc(100dvh - 72px - 4rem);min-height:520px">
@@ -2626,7 +2628,7 @@ function renderChatEmpty() {
   $('#chat-pane').innerHTML = `<div class="chat-wall flex-1 flex items-center justify-center p-8"><div class="text-center max-w-sm">
     <div class="mx-auto w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-fuchsia-500 text-white flex items-center justify-center shadow-xl shadow-indigo-200 mb-5">${ic('message', 'w-9 h-9')}</div>
     <div class="text-xl font-extrabold tracking-tight text-slate-900">Office chat</div>
-    <p class="text-sm text-slate-500 mt-2">Pick a chat on the left, or start a new one. Messages stay inside WorkDesk — only the people in a chat can see them.</p>
+    <p class="text-sm text-slate-500 mt-2">Pick a chat on the left, or start a new one. Messages stay inside Intelli Workspace — only the people in a chat can see them.</p>
     <button onclick="newChatPicker()" class="btn btn-primary mt-5">${ic('plus')} New chat</button></div></div>`;
 }
 function newChatPicker() {
@@ -2637,12 +2639,12 @@ function newChatPicker() {
     </div></div>`;
   $('#modal').classList.remove('hidden');
 }
-async function startChat(eid) { const r = await run(() => api('/employeeworkspace/api/chat/direct', { json: { employee_id: eid } })); C.q = ''; location.hash = '#/chat/' + r.id; }
+async function startChat(eid) { const r = await run(() => api('/workspace/api/chat/direct', { json: { employee_id: eid } })); C.q = ''; location.hash = '#/chat/' + r.id; }
 
 async function openConversation(cid) {
   const conv = C.list.find(c => c.id === cid);
   if (!conv) { renderChatEmpty(); return; }
-  const d = await api(`/employeeworkspace/api/chat/${cid}/messages`);
+  const d = await api(`/workspace/api/chat/${cid}/messages`);
   C.msgs = d.messages; C.othersRead = d.others_read; C.lastId = C.msgs.length ? C.msgs[C.msgs.length - 1].id : 0; C.file = null;
   const sub = conv.kind === 'office' ? `${conv.members} people` : conv.working_on ? `<span class="text-emerald-600 font-medium">● Working on ${esc(conv.working_on)}</span>` : esc(conv.subtitle || '');
   $('#chat-pane').innerHTML = `
@@ -2671,8 +2673,8 @@ function msgBubble(m, prev) {
   if (m.deleted) content = `<div class="italic text-[13px] ${mine ? 'text-indigo-100' : 'text-slate-400'} flex items-center gap-1.5">🚫 This message was deleted</div>`;
   else {
     const file = m.file ? (m.file_type === 'image'
-      ? `<a href="/employeeworkspace/chat-files/${esc(m.file)}" target="_blank"><img src="/employeeworkspace/chat-files/${esc(m.file)}" alt="${esc(m.file_name)}" class="rounded-xl max-h-72 max-w-full object-cover mb-1"></a>`
-      : `<a href="/employeeworkspace/chat-files/${esc(m.file)}" target="_blank" class="flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1 ${mine ? 'bg-white/15 hover:bg-white/25' : 'bg-slate-100 hover:bg-slate-200'}"><span class="w-9 h-9 rounded-lg flex items-center justify-center ${mine ? 'bg-white/20' : 'bg-white text-indigo-600'}">${ic('clip')}</span><span class="min-w-0"><span class="block text-sm font-semibold truncate">${esc(m.file_name)}</span><span class="block text-[11px] opacity-70">Tap to open</span></span></a>`) : '';
+      ? `<a href="/workspace/chat-files/${esc(m.file)}" target="_blank"><img src="/workspace/chat-files/${esc(m.file)}" alt="${esc(m.file_name)}" class="rounded-xl max-h-72 max-w-full object-cover mb-1"></a>`
+      : `<a href="/workspace/chat-files/${esc(m.file)}" target="_blank" class="flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1 ${mine ? 'bg-white/15 hover:bg-white/25' : 'bg-slate-100 hover:bg-slate-200'}"><span class="w-9 h-9 rounded-lg flex items-center justify-center ${mine ? 'bg-white/20' : 'bg-white text-indigo-600'}">${ic('clip')}</span><span class="min-w-0"><span class="block text-sm font-semibold truncate">${esc(m.file_name)}</span><span class="block text-[11px] opacity-70">Tap to open</span></span></a>`) : '';
     content = file + (m.body ? `<div class="text-[14px] leading-relaxed whitespace-pre-wrap break-words">${linkify(m.body)}</div>` : '');
   }
   const ticks = mine && !m.deleted ? `<span data-tick="${m.id}" class="ml-1 ${m.id <= C.othersRead ? 'text-sky-300' : 'text-indigo-200/80'}" title="${m.id <= C.othersRead ? 'Read' : 'Sent'}">${m.id <= C.othersRead ? '✓✓' : '✓'}</span>` : '';
@@ -2708,7 +2710,7 @@ async function sendChat(e) {
   C.busy = true;
   const fd = new FormData(); fd.append('body', text); if (C.file) fd.append('file', C.file);
   try {
-    const r = await api(`/employeeworkspace/api/chat/${C.cid}/messages`, { method: 'POST', body: fd });
+    const r = await api(`/workspace/api/chat/${C.cid}/messages`, { method: 'POST', body: fd });
     inp.value = ''; inp.style.height = 'auto'; C.file = null; $('#chat-attach').classList.add('hidden');
     if (!C.msgs.some(m => m.id === r.message.id)) C.msgs.push(r.message);
     C.lastId = Math.max(C.lastId, r.message.id);
@@ -2718,20 +2720,20 @@ async function sendChat(e) {
 }
 function deleteChatMsg(id) {
   confirmBox('Delete this message?', 'It will be removed for everyone in this chat.', async () => {
-    await api('/employeeworkspace/api/chat/messages/' + id, { method: 'DELETE' });
+    await api('/workspace/api/chat/messages/' + id, { method: 'DELETE' });
     const m = C.msgs.find(x => x.id === id); if (m) { m.deleted = 1; m.body = m.file = null; }
     renderMessages(false); refreshChatList();
   });
 }
-async function markChatRead(cid) { try { await api(`/employeeworkspace/api/chat/${cid}/read`, { json: {} }); } catch (e) {} pollLive(true); }
+async function markChatRead(cid) { try { await api(`/workspace/api/chat/${cid}/read`, { json: {} }); } catch (e) {} pollLive(true); }
 async function refreshChatList() {
-  try { const d = await api('/employeeworkspace/api/chat/conversations'); C.list = d.conversations; C.people = d.people; if ($('#chat-list')) renderChatList(); } catch (e) {}
+  try { const d = await api('/workspace/api/chat/conversations'); C.list = d.conversations; C.people = d.people; if ($('#chat-list')) renderChatList(); } catch (e) {}
 }
 async function chatTick() {
   if (location.hash.split('/')[1] !== 'chat') { clearInterval(C.timer); return; }
   if (C.cid && $('#chat-msgs')) {
     try {
-      const d = await api(`/employeeworkspace/api/chat/${C.cid}/messages?after=${C.lastId}`);
+      const d = await api(`/workspace/api/chat/${C.cid}/messages?after=${C.lastId}`);
       const box = $('#chat-msgs'), nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
       let changed = false;
       d.messages.forEach(m => { if (!C.msgs.some(x => x.id === m.id)) { C.msgs.push(m); changed = true; } });
@@ -2746,7 +2748,7 @@ async function chatTick() {
 
 async function pageActivity() {
   setTitle('Activity');
-  const list = await api('/employeeworkspace/api/activity?limit=200');
+  const list = await api('/workspace/api/activity?limit=200');
   $('#view').innerHTML = `<div class="card p-5 max-w-3xl"><div class="divide-y divide-slate-100">${activityList(list)}</div></div>`;
 }
 
@@ -2767,7 +2769,7 @@ async function pageSettings() {
     <div class="card p-5"><div class="flex flex-wrap items-center gap-3"><span class="kpi-ico bg-indigo-50 text-indigo-600">${ic('moon')}</span><div class="flex-1 min-w-[160px]"><h3 class="font-bold text-slate-900">Appearance</h3><p class="text-sm text-slate-500">Saved on this device only.</p></div>
       <div class="seg">${[['light', 'Light', 'sun'], ['dark', 'Dark', 'moon'], ['auto', 'Auto', 'zap']].map(([k, l, i]) => `<button data-theme-opt="${k}" onclick="setTheme('${k}')" class="${themePref() === k ? 'on' : ''}">${ic(i, 'w-3.5 h-3.5')}${l}</button>`).join('')}</div></div>
       <p class="text-xs text-slate-400 mt-2">Auto follows your phone or computer — dark when it's in dark mode.</p></div>
-    <div class="card p-5" id="phone-card"><div class="flex items-start gap-3 mb-3"><span class="kpi-ico bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600">${ic('bell')}</span><div><h3 class="font-bold text-slate-900">Phone app & notifications</h3><p class="text-sm text-slate-500">Get alerts on this phone even when WorkDesk is closed${S.isMgr ? ' — new work from staff, tasks ready for review, leave, filings and messages' : ' — new tasks for you and chat messages'}.</p></div></div>
+    <div class="card p-5" id="phone-card"><div class="flex items-start gap-3 mb-3"><span class="kpi-ico bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600">${ic('bell')}</span><div><h3 class="font-bold text-slate-900">Phone app & notifications</h3><p class="text-sm text-slate-500">Get alerts on this phone even when Intelli Workspace is closed${S.isMgr ? ' — new work from staff, tasks ready for review, leave, filings and messages' : ' — new tasks for you and chat messages'}.</p></div></div>
       <div id="push-status" class="text-sm text-slate-500">Checking…</div></div>
     <div class="card p-5">${phoneGuide()}</div>
     ${S.me.role === 'admin' ? `<div class="card p-5"><h3 class="font-semibold mb-1">Office access code</h3>
@@ -2778,77 +2780,77 @@ async function pageSettings() {
       <div class="col-span-2 sm:col-span-1"><label class="block text-xs font-semibold text-slate-600 mb-1">New PIN</label><input name="new_pin" type="password" inputmode="numeric" class="field" required minlength="4"></div>
       <div class="col-span-2"><button class="btn btn-primary">Update PIN</button></div></form></div>
     <div class="card p-5 text-sm text-slate-600"><h3 class="font-semibold text-slate-800 mb-2">Team access</h3>
-      Team members open <code class="bg-slate-100 px-1.5 py-0.5 rounded">intellitaxadvisors.com/employeeworkspace</code> on any phone or computer and sign in with their PIN.
+      Team members open <code class="bg-slate-100 px-1.5 py-0.5 rounded">intellitaxadvisors.com/workspace</code> on any phone or computer and sign in with their PIN.
       Employees only see tasks assigned to them, their own timesheet and expenses. Managers see everything.</div>
     ${S.me.role === 'admin' ? `<div class="card p-5 border-red-200"><h3 class="font-semibold text-red-700 mb-1">Clear all data</h3><p class="text-sm text-slate-600 mb-3">Deletes every client, project, task, time entry and expense (e.g. to remove the demo data). Team members are kept.</p><button onclick="resetData()" class="btn btn-danger">Clear data…</button></div>` : ''}
   </div>`;
 }
 function phoneGuide() {
   const step = (n, html) => `<div class="flex gap-3"><span class="w-6 h-6 shrink-0 rounded-full bg-indigo-50 text-indigo-600 text-xs font-bold flex items-center justify-center">${n}</span><div class="text-sm text-slate-600">${html}</div></div>`;
-  return `<details ${!window.isSecureContext && S.isMgr ? 'open' : ''}><summary class="cursor-pointer font-bold text-slate-900 list-none flex items-center gap-2">${ic('zap', 'w-4 h-4 text-indigo-500')} Install WorkDesk on your phone</summary>
+  return `<details ${!window.isSecureContext && S.isMgr ? 'open' : ''}><summary class="cursor-pointer font-bold text-slate-900 list-none flex items-center gap-2">${ic('zap', 'w-4 h-4 text-indigo-500')} Install Intelli Workspace on your phone</summary>
     <div class="mt-4 grid sm:grid-cols-2 gap-5">
       <div class="space-y-3"><div class="text-xs font-bold uppercase tracking-wider text-slate-400">iPhone (Safari)</div>
-        ${step(1, 'Open the WorkDesk link in <b>Safari</b>.')}${step(2, 'Tap the <b>Share</b> button, then <b>Add to Home Screen</b>.')}${step(3, 'Open WorkDesk from the new icon, sign in, then come here and tap <b>Turn on notifications</b>.')}</div>
+        ${step(1, 'Open the Intelli Workspace link in <b>Safari</b>.')}${step(2, 'Tap the <b>Share</b> button, then <b>Add to Home Screen</b>.')}${step(3, 'Open Intelli Workspace from the new icon, sign in, then come here and tap <b>Turn on notifications</b>.')}</div>
       <div class="space-y-3"><div class="text-xs font-bold uppercase tracking-wider text-slate-400">Android (Chrome)</div>
-        ${step(1, 'Open the WorkDesk link in <b>Chrome</b>.')}${step(2, 'Tap <b>⋮</b> then <b>Install app</b> (or <b>Add to Home screen</b>).')}${step(3, 'Open it, sign in, then tap <b>Turn on notifications</b> here.')}</div>
+        ${step(1, 'Open the Intelli Workspace link in <b>Chrome</b>.')}${step(2, 'Tap <b>⋮</b> then <b>Install app</b> (or <b>Add to Home screen</b>).')}${step(3, 'Open it, sign in, then tap <b>Turn on notifications</b> here.')}</div>
     </div></details>
-    <p class="text-sm text-slate-500 mt-5 pt-5 border-t border-[var(--line)]">${ic('lock', 'w-4 h-4 inline text-indigo-500')} WorkDesk is online at <b>intellitaxadvisors.com/employeeworkspace</b> — it works from the office, home or on the road, and each person signs in with their own PIN.</p>`;
+    <p class="text-sm text-slate-500 mt-5 pt-5 border-t border-[var(--line)]">${ic('lock', 'w-4 h-4 inline text-indigo-500')} Intelli Workspace is online at <b>intellitaxadvisors.com/workspace</b> — it works from the office, home or on the road, and each person signs in with their own PIN.</p>`;
 }
 async function refreshPushStatus() {
   const el = $('#push-status'); if (!el) return;
   let on = false, devices = 0;
-  try { on = !!(await currentPushSub()); devices = (await api('/employeeworkspace/api/push/key')).devices; } catch (e) {}
+  try { on = !!(await currentPushSub()); devices = (await api('/workspace/api/push/key')).devices; } catch (e) {}
   const perm = 'Notification' in window ? Notification.permission : 'unsupported';
   el.innerHTML = `<div class="flex flex-wrap items-center gap-2">
     ${on ? pill('On for this device', 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200') : pill('Off on this device', 'bg-slate-100 text-slate-600')}
     ${devices ? `<span class="text-xs text-slate-500">${devices} device${devices > 1 ? 's' : ''} linked to your account</span>` : ''}
     <div class="flex-1"></div>
-    ${on ? `<button onclick="run(() => api('/employeeworkspace/api/push/test', { method: 'POST' }), 'Test sent — check your phone')" class="btn btn-ghost btn-sm">Send test</button><button onclick="disablePush().then(refreshPushStatus)" class="btn btn-ghost btn-sm">Turn off</button>`
+    ${on ? `<button onclick="run(() => api('/workspace/api/push/test', { method: 'POST' }), 'Test sent — check your phone')" class="btn btn-ghost btn-sm">Send test</button><button onclick="disablePush().then(refreshPushStatus)" class="btn btn-ghost btn-sm">Turn off</button>`
       : `<button onclick="enablePush().then(() => { toast('Notifications are on'); refreshPushStatus(); }).catch(e => toast(e.message, 'err', 7000))" class="btn btn-primary btn-sm">${ic('bell')} Turn on notifications</button>`}</div>
     ${!window.isSecureContext ? `<div class="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-xl p-3">You're on the plain office link (${esc(location.host)}). Phone notifications need the secure https link from the setup below.</div>`
-      : perm === 'denied' ? `<div class="mt-3 text-xs text-red-700 bg-red-50 rounded-xl p-3">Notifications are blocked for WorkDesk. Allow them in your browser or phone settings.</div>`
-      : isIOS() && !isStandalone() ? `<div class="mt-3 text-xs text-slate-600 bg-slate-50 rounded-xl p-3">On iPhone, add WorkDesk to your Home Screen first and open it from there.</div>` : ''}`;
+      : perm === 'denied' ? `<div class="mt-3 text-xs text-red-700 bg-red-50 rounded-xl p-3">Notifications are blocked for Intelli Workspace. Allow them in your browser or phone settings.</div>`
+      : isIOS() && !isStandalone() ? `<div class="mt-3 text-xs text-slate-600 bg-slate-50 rounded-xl p-3">On iPhone, add Intelli Workspace to your Home Screen first and open it from there.</div>` : ''}`;
 }
 const fmtBytes = b => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : b >= 1e6 ? (b / 1e6).toFixed(1) + ' MB' : b >= 1e3 ? Math.round(b / 1e3) + ' KB' : (b || 0) + ' B';
 async function renderStorage() {
   const el = $('#storage-card'); if (!el) return;
-  let d; try { d = await api('/employeeworkspace/api/admin/storage'); } catch (e) { el.innerHTML = `<div class="text-sm text-red-600">${esc(e.message)}</div>`; return; }
+  let d; try { d = await api('/workspace/api/admin/storage'); } catch (e) { el.innerHTML = `<div class="text-sm text-red-600">${esc(e.message)}</div>`; return; }
   const colors = { database: '#6366f1', receipts: '#10b981', chat: '#0ea5e9', backups: '#f59e0b' };
   const meter = (label, used, total) => `<div class="rounded-2xl bg-slate-50 p-4"><div class="text-xs font-semibold text-slate-500">${label}</div>
     <div class="text-2xl font-extrabold text-slate-900 mt-0.5">${fmtBytes(used)} <span class="text-sm font-semibold text-slate-500">of ${fmtBytes(total)}</span></div>
     <div class="h-2 rounded-full bg-slate-200 overflow-hidden mt-2"><div style="width:${Math.min(100, Math.max(used / total * 100, 0.5))}%" class="h-full bg-indigo-500"></div></div></div>`;
   el.innerHTML = `
     <div class="flex items-start gap-3 mb-4"><span class="kpi-ico bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600">${ic('disk')}</span>
-      <div class="flex-1"><h3 class="font-bold text-slate-900">Storage & daily backup</h3><p class="text-sm text-slate-500">WorkDesk keeps everything in the office's Supabase account. An extra backup copy is saved every night.</p></div></div>
+      <div class="flex-1"><h3 class="font-bold text-slate-900">Storage & daily backup</h3><p class="text-sm text-slate-500">Intelli Workspace keeps everything in the office's Supabase account. An extra backup copy is saved every night.</p></div></div>
     <div class="text-xs text-slate-500 mb-3">${d.counts.tasks} tasks · ${d.counts.expenses} expenses · ${d.counts.clients} clients · ${d.counts.messages} messages</div>
     <div class="grid sm:grid-cols-2 gap-3 mb-4">${meter('Database (free plan limit)', d.plan.database_used, d.plan.database)}${meter('Files (free plan limit)', d.plan.files_used, d.plan.files)}</div>
     <div class="space-y-2 mb-5">${d.parts.map(p => `<div class="flex items-center gap-3 text-sm"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${colors[p.key]}"></span><span class="flex-1 text-slate-600">${esc(p.label)}</span><span class="font-semibold tabular text-slate-900">${fmtBytes(p.bytes)}</span></div>`).join('')}</div>
     ${d.files_error ? `<div class="text-xs text-amber-800 bg-amber-50 rounded-xl p-3 mb-4">Couldn't read file storage: ${esc(d.files_error)}</div>` : ''}
     <div class="pt-4 border-t border-[var(--line)]">
       <div class="font-bold text-slate-900 mb-1 flex items-center gap-2">${ic('cloud', 'w-4 h-4 text-indigo-500')} Daily backup</div>
-      <p class="text-xs text-slate-500 mb-3">Every night at about 2 AM a copy of all WorkDesk data is saved as a zip in the office's private storage. The last ${d.keep} are kept, and you can download any of them.</p>
+      <p class="text-xs text-slate-500 mb-3">Every night at about 2 AM a copy of all Intelli Workspace data is saved as a zip in the office's private storage. The last ${d.keep} are kept, and you can download any of them.</p>
       <label class="flex items-center gap-3 rounded-xl border border-[var(--line)] px-3.5 py-3 cursor-pointer hover:bg-slate-50 mb-3"><input type="checkbox" ${d.auto ? 'checked' : ''} onchange="setBackupAuto(this.checked)" class="w-4 h-4 accent-indigo-600"><span class="text-sm text-slate-700"><b>Back up automatically every night</b></span></label>
       <div class="flex flex-wrap items-center gap-3">
         <div class="flex-1 min-w-[200px] text-sm">${d.last_error ? `<span class="text-red-600">⚠︎ Last backup failed: ${esc(d.last_error)}</span>`
           : d.last ? `<span class="text-emerald-700 font-semibold">✓ Last backup ${ago(d.last)}</span> <span class="text-slate-500">· ${fdate(d.last)}, ${new Date(d.last).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}${d.last_size ? ' · ' + fmtBytes(d.last_size) : ''}</span>` : '<span class="text-slate-500">No backup yet</span>'}</div>
         <button id="backup-now" onclick="runBackup()" class="btn btn-primary btn-sm">${ic('cloud')} Back up now</button></div>
-      ${d.backups.length ? `<details class="mt-3"><summary class="text-xs font-semibold text-indigo-600 cursor-pointer">Recent backups (${d.backups.length})</summary><div class="mt-2 divide-y divide-[var(--line)] text-xs">${d.backups.map(b => `<div class="flex justify-between gap-3 py-1.5"><a href="/employeeworkspace/api/admin/backups/${encodeURIComponent(b.name)}" class="text-indigo-600 hover:underline">${esc(b.name)}</a><span class="text-slate-400">${fmtBytes(b.size)}</span></div>`).join('')}</div></details>` : ''}
+      ${d.backups.length ? `<details class="mt-3"><summary class="text-xs font-semibold text-indigo-600 cursor-pointer">Recent backups (${d.backups.length})</summary><div class="mt-2 divide-y divide-[var(--line)] text-xs">${d.backups.map(b => `<div class="flex justify-between gap-3 py-1.5"><a href="/workspace/api/admin/backups/${encodeURIComponent(b.name)}" class="text-indigo-600 hover:underline">${esc(b.name)}</a><span class="text-slate-400">${fmtBytes(b.size)}</span></div>`).join('')}</div></details>` : ''}
     </div>`;
 }
-async function setBackupAuto(on) { await run(() => api('/employeeworkspace/api/admin/backup', { method: 'PUT', json: { auto: on ? 1 : 0 } }), on ? 'Nightly backup is on' : 'Nightly backup is off'); renderStorage(); }
+async function setBackupAuto(on) { await run(() => api('/workspace/api/admin/backup', { method: 'PUT', json: { auto: on ? 1 : 0 } }), on ? 'Nightly backup is on' : 'Nightly backup is off'); renderStorage(); }
 async function runBackup() {
   const b = $('#backup-now'); b.disabled = true; b.innerHTML = '<span class="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin"></span> Backing up…';
-  try { const r = await api('/employeeworkspace/api/admin/backup/run', { method: 'POST' }); toast(`Backed up (${fmtBytes(r.size)})`); }
+  try { const r = await api('/workspace/api/admin/backup/run', { method: 'POST' }); toast(`Backed up (${fmtBytes(r.size)})`); }
   catch (e) { toast(e.message, 'err', 7000); }
   renderStorage();
 }
-async function saveSettings(e) { e.preventDefault(); await run(() => api('/employeeworkspace/api/settings', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'Settings saved'); await loadMeta(); }
-async function saveOfficeCode(e) { e.preventDefault(); await run(() => api('/employeeworkspace/api/settings/office-code', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'Office code saved'); e.target.reset(); await loadMeta(); render(true); }
-async function changePin(e) { e.preventDefault(); await run(() => api('/employeeworkspace/api/me/pin', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'PIN updated'); e.target.reset(); }
+async function saveSettings(e) { e.preventDefault(); await run(() => api('/workspace/api/settings', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'Settings saved'); await loadMeta(); }
+async function saveOfficeCode(e) { e.preventDefault(); await run(() => api('/workspace/api/settings/office-code', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'Office code saved'); e.target.reset(); await loadMeta(); render(true); }
+async function changePin(e) { e.preventDefault(); await run(() => api('/workspace/api/me/pin', { method: 'PUT', json: Object.fromEntries(new FormData(e.target)) }), 'PIN updated'); e.target.reset(); }
 function resetData() {
   openForm({ title: 'Clear all data?', danger: true, submit: 'Delete everything', intro: '<p class="text-sm text-slate-600 mb-3">This cannot be undone. Team members are kept.</p>',
     fields: [{ name: 'confirm', label: 'Type RESET to confirm', required: true }],
-    onSubmit: async v => { await api('/employeeworkspace/api/admin/reset', { json: v }); toast('All data cleared'); await loadMeta(); location.hash = '#/dashboard'; render(); } });
+    onSubmit: async v => { await api('/workspace/api/admin/reset', { json: v }); toast('All data cleared'); await loadMeta(); location.hash = '#/dashboard'; render(); } });
 }
 
 boot();

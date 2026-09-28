@@ -133,7 +133,7 @@ def main():
                                          ("ExpenseFlow attachments", root / "backend" / "uploads", attachments, "expenseflow/")):
         done, missing = upload(folder, names, prefix)
         print(f"Uploaded {done} {label}" + (f" ({missing} listed in the database but not found on disk)" if missing else ""))
-    print("Done. Staff sign in at https://intellitaxadvisors.com/employeeworkspace/ with their existing PINs.")
+    print("Done. Staff sign in at https://intellitaxadvisors.com/workspace/ with their existing PINs.")
 
 
 if __name__ == "__main__":

@@ -4,7 +4,8 @@
   <meta name="robots" content="noindex, nofollow">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ExpenseFlow · Intelli Workspace</title>
+  <title>Intelli Expenses · Intelli Workspace</title>
+  <link rel="icon" href="/assets/img/brand/favicon.svg" type="image/svg+xml">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4/build/global/luxon.min.js"></script>
@@ -118,15 +119,13 @@
 <aside id="sidebar" class="w-64 max-w-[85vw] min-h-screen flex flex-col fixed left-0 top-0 bottom-0 z-40 bg-[#16172a] border-r border-white/5 -translate-x-full lg:translate-x-0 transition-transform overflow-y-auto">
   <!-- Logo -->
   <div class="px-6 py-5 flex items-center gap-3 border-b border-white/5">
-    <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center shadow-lg">
-      <i class="fas fa-chart-line text-white text-sm"></i>
-    </div>
+    <img src="/assets/img/brand/icon-192.png" alt="" class="w-9 h-9 rounded-xl ring-1 ring-white/15">
     <div>
-      <div class="font-bold text-white text-[15px] leading-tight">ExpenseFlow</div>
-      <div class="text-xs text-gray-500">Company Tracker</div>
+      <div class="font-bold text-white text-[15px] leading-tight">Intelli Expenses</div>
+      <div class="text-xs text-gray-500">Intelli Workspace</div>
     </div>
   </div>
-  <a href="/employeeworkspace/" class="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5"><i class="fas fa-arrow-left w-4 text-center"></i> Back to WorkDesk</a>
+  <a href="/workspace/" class="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-gray-400 hover:text-white hover:bg-white/5"><i class="fas fa-arrow-left w-4 text-center"></i> Back to Intelli Workspace</a>
 
   <!-- Nav -->
   <nav class="flex-1 px-3 py-4 space-y-1">
@@ -369,7 +368,7 @@
         <div>
           <div class="card p-5 mb-5">
             <h3 class="font-semibold text-white mb-1">API Documentation</h3>
-            <p class="text-xs text-gray-500 mb-4">Base URL: <code class="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded text-xs" id="api-base-url" style="word-break:break-all">https://intellitaxadvisors.com/employeeworkspace/expenses</code></p>
+            <p class="text-xs text-gray-500 mb-4">Base URL: <code class="text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded text-xs" id="api-base-url" style="word-break:break-all">https://intellitaxadvisors.com/workspace/expenses</code></p>
             <div class="space-y-3 text-xs">
               <div class="bg-[#13141f] rounded-lg p-3">
                 <div class="text-green-400 font-mono mb-1">GET /api/expenses</div>
@@ -846,7 +845,7 @@
 
 <script>
 // ═══ CONFIG ══════════════════════════════════════════════════════════════════
-const API = '/employeeworkspace/expenses/api';
+const API = '/workspace/expenses/api';
 let currentPage = 0;
 const PAGE_SIZE = 15;
 let currentPeriod = 30;
@@ -876,7 +875,7 @@ async function api(path, opts={}) {
     });
     if ((r.status === 401 || r.status === 403) && !opts.headers?.['X-API-Key']) {
       const e = await r.clone().json().catch(() => ({}));
-      if (r.status === 401 || e.login) { location.href = '/employeeworkspace/'; throw new Error(e.error || 'Please sign in'); }
+      if (r.status === 401 || e.login) { location.href = '/workspace/'; throw new Error(e.error || 'Please sign in'); }
     }
     if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || 'Request failed'); }
     return r.json();

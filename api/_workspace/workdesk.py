@@ -1,10 +1,10 @@
-"""WorkDesk — office task, time & client-expense tracker (Intelli Workspace).
+"""Intelli Workspace — office task, time & client-expense tracker (Intelli Workspace).
 
-Runs on Vercel at intellitaxadvisors.com/employeeworkspace, with data in Supabase:
+Runs on Vercel at intellitaxadvisors.com/workspace, with data in Supabase:
 Postgres schema `workdesk` (supabase/004_workspace.sql) and files in the private `workspace` Storage bucket.
-The frontend is served as static files from /employeeworkspace/ (employeeworkspace/index.html).
+The frontend is served as static files from /workspace/ (workspace/index.html).
 
-Local run:  DATABASE_URL=… python -m api._workspace.workdesk   →  http://localhost:8060/employeeworkspace/
+Local run:  DATABASE_URL=… python -m api._workspace.workdesk   →  http://localhost:8060/workspace/
 """
 import base64
 import csv
@@ -33,9 +33,9 @@ os.environ["TZ"] = "Asia/Kolkata"
 if hasattr(time, "tzset"):
     time.tzset()
 
-BASE = "/employeeworkspace"                     # URL prefix of the whole app on the website
+BASE = "/workspace"                     # URL prefix of the whole app on the website
 REPO_DIR = Path(__file__).resolve().parents[2]
-STATIC_DIR = REPO_DIR / "employeeworkspace"     # served by Vercel directly; Flask serves it only when run locally
+STATIC_DIR = REPO_DIR / "workspace"     # served by Vercel directly; Flask serves it only when run locally
 PORT = int(os.environ.get("PORT", 8060))
 
 RECEIPT_EXT = {"png", "jpg", "jpeg", "gif", "webp", "pdf", "heic", "heif", "tif", "tiff", "bmp"}
@@ -60,7 +60,7 @@ app.config["MAX_CONTENT_LENGTH"] = int(4.4 * 1024 * 1024)
 
 
 class PrefixMiddleware:
-    """The app lives under /employeeworkspace; routes below are written without it."""
+    """The app lives under /workspace; routes below are written without it."""
     def __init__(self, wsgi):
         self.wsgi = wsgi
 
@@ -76,7 +76,7 @@ app.wsgi_app = PrefixMiddleware(app.wsgi_app)
 
 
 def touch():
-    """Bump the shared change counter; every open WorkDesk tab polls /api/live and refreshes when it moves."""
+    """Bump the shared change counter; every open Intelli Workspace tab polls /api/live and refreshes when it moves."""
     db = get_db()
     db.execute("UPDATE live SET seq=seq+1 WHERE id=1")
     db.commit()
@@ -374,7 +374,7 @@ def notify_user(recipient_id, kind, message, task_id=None, url=None, anonymous=F
         return
     get_db().execute("INSERT INTO notifications(recipient_id,actor_id,task_id,kind,message) VALUES (?,?,?,?,?)",
                      (recipient_id, None if anonymous else g.uid, task_id, kind, message))
-    actor = "WorkDesk" if anonymous or not me() else me()["name"]
+    actor = "Intelli Workspace" if anonymous or not me() else me()["name"]
     send_push([recipient_id], actor, message, url or (f"/#/task/{task_id}" if task_id else "/#/dashboard"))
 
 
@@ -2806,7 +2806,7 @@ def push_unsubscribe():
 def push_test():
     if not scalar("SELECT 1 FROM push_subs WHERE employee_id=?", (g.uid,)):
         return bad("Turn on notifications on this phone first")
-    send_push([g.uid], "WorkDesk ✓", "Phone notifications are working. You'll get alerts here even when the app is closed.", "/#/dashboard")
+    send_push([g.uid], "Intelli Workspace ✓", "Phone notifications are working. You'll get alerts here even when the app is closed.", "/#/dashboard")
     return jsonify(ok=True)
 
 
@@ -3185,7 +3185,7 @@ IMPORT_SPECS = {
                  ("Description", True, "Cab to client office", "Required. What the money was spent on."),
                  ("Amount", True, 450, "Required. Number only, no ₹ sign needed."),
                  ("Category", False, "Conveyance", "One of the listed categories. Blank = Other."),
-                 ("Client", False, "Acme Traders Pvt Ltd", "Exact client name as in WorkDesk. Blank = office expense."),
+                 ("Client", False, "Acme Traders Pvt Ltd", "Exact client name as in Intelli Workspace. Blank = office expense."),
                  ("Project", False, "", "Optional. Project name under that client."),
                  ("Spent by", False, "", "Team member's name. Blank = you."),
                  ("Billable", False, "Yes", "Yes or No. Blank = Yes."),
@@ -3251,7 +3251,7 @@ def import_template(kind):
                 ws.add_data_validation(dv)
         lists.sheet_state = "hidden"
     help_ws = wb.create_sheet("How to fill")
-    help_ws["A1"] = f"WorkDesk — {kind} import template"
+    help_ws["A1"] = f"Intelli Workspace — {kind} import template"
     help_ws["A1"].font = Font(bold=True, size=14)
     help_ws["A2"] = "Fill one row per " + ("client" if kind == "clients" else "expense") + " on the first sheet. Row 2 is an example — replace or delete it. Columns marked * are required. Don't rename the column headings."
     help_ws["A4"], help_ws["B4"] = "Column", "What to enter"
@@ -3266,7 +3266,7 @@ def import_template(kind):
     buf = io.BytesIO()
     wb.save(buf)
     return Response(buf.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": f"attachment; filename=WorkDesk-{kind}-template.xlsx"})
+                    headers={"Content-Disposition": f"attachment; filename=IntelliWorkspace-{kind}-template.xlsx"})
 
 
 def read_upload_rows():
@@ -3339,7 +3339,7 @@ def validate_import(kind, raw_rows, create_missing=False):
             if not v["name"]:
                 v["error"] = "Client name is missing"
             elif key in existing:
-                v["error"] = "Already in WorkDesk — skipped"
+                v["error"] = "Already in Intelli Workspace — skipped"
             elif key in seen:
                 v["error"] = "Listed twice in this file"
             seen.add(key)
@@ -3461,7 +3461,7 @@ def import_commit(kind):
 
 
 # ── Storage summary & daily cloud backup (admin) ────────────────────────────
-# Everything already lives in Supabase. The daily backup is an extra safety copy: a zip of every WorkDesk table
+# Everything already lives in Supabase. The daily backup is an extra safety copy: a zip of every Intelli Workspace table
 # (as JSON) saved to the private bucket under backups/, made by a Vercel cron job (vercel.json) or "Back up now".
 
 BACKUP_KEEP = 14
@@ -3493,7 +3493,7 @@ def make_backup():
     try:
         buf = io.BytesIO()
         stamp = datetime.now().strftime("%Y-%m-%d")
-        name = f"WorkDesk-backup-{stamp}.zip"
+        name = f"IntelliWorkspace-backup-{stamp}.zip"
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
             for t in BACKUP_TABLES:
                 data = rows(f"SELECT * FROM {t}")
@@ -3501,8 +3501,8 @@ def make_backup():
                     data = [r for r in data if r["key"] not in ("secret", "vapid_private")]
                 z.writestr(f"{t}.json", json.dumps(data, ensure_ascii=False, indent=1, default=str))
             z.writestr("HOW-TO-RESTORE.txt",
-                       "WorkDesk backup made " + datetime.now().strftime("%d %b %Y %H:%M") + " (India time)\n\n"
-                       "Each .json file holds every row of one WorkDesk table (Supabase schema 'workdesk').\n"
+                       "Intelli Workspace backup made " + datetime.now().strftime("%d %b %Y %H:%M") + " (India time)\n\n"
+                       "Each .json file holds every row of one Intelli Workspace table (Supabase schema 'workdesk').\n"
                        "Receipts, invoice scans and chat attachments stay in the Supabase Storage bucket 'workspace'\n"
                        "(folders receipts/ and chat/); the file names in the tables point to them.\n"
                        "To restore, load the rows back into the matching tables, e.g. with scripts/migrate_workspace.py.\n")
@@ -3579,7 +3579,7 @@ def backup_now():
         name, size = make_backup()
     except Exception as e:
         return bad(str(e))
-    log("system", "backed up WorkDesk to Supabase Storage")
+    log("system", "backed up Intelli Workspace to Supabase Storage")
     get_db().commit()
     return jsonify(ok=True, name=name, size=size)
 
@@ -3587,7 +3587,7 @@ def backup_now():
 @app.get("/api/admin/backups/<name>")
 @admin_required
 def download_backup(name):
-    if not re.fullmatch(r"WorkDesk-backup-\d{4}-\d{2}-\d{2}\.zip", name):
+    if not re.fullmatch(r"(IntelliWorkspace|Intelli Workspace)-backup-\d{4}-\d{2}-\d{2}\.zip", name):
         return bad("Not found", 404)
     return stored_file("backups/" + name, name)
 
@@ -3598,7 +3598,7 @@ def cron_backup():
     secret = os.environ.get("CRON_SECRET", "")
     if not secret or not hmac.compare_digest(request.headers.get("Authorization", ""), f"Bearer {secret}"):
         return bad("Not allowed", 401)
-    me()   # no signed-in user: notifications come from "WorkDesk"
+    me()   # no signed-in user: notifications come from "Intelli Workspace"
     try:
         remind_expiring_documents()
     except Exception as e:
@@ -3660,5 +3660,5 @@ app.config.update(
     SESSION_REFRESH_EACH_REQUEST=False)
 
 if __name__ == "__main__":
-    print(f"WorkDesk running — open http://127.0.0.1:{PORT}{BASE}/ in your browser")
+    print(f"Intelli Workspace running — open http://127.0.0.1:{PORT}{BASE}/ in your browser")
     app.run(host="0.0.0.0", port=PORT, debug=False, threaded=True)

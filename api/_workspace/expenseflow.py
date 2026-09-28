@@ -1,8 +1,8 @@
-"""ExpenseFlow — project expense tracker with bank-statement import (Intelli Workspace).
+"""Intelli Expenses — project expense tracker with bank-statement import (Intelli Workspace).
 
-Runs on Vercel at intellitaxadvisors.com/employeeworkspace/expenses. Data: Supabase schema `expenseflow`;
+Runs on Vercel at intellitaxadvisors.com/workspace/expenses. Data: Supabase schema `expenseflow`;
 attachments in the private `workspace` bucket under expenseflow/.
-Sign-in is WorkDesk's: any active WorkDesk employee may use it (shared session cookie), or an API key (X-API-Key).
+Sign-in is Intelli Workspace's: any active Intelli Workspace employee may use it (shared session cookie), or an API key (X-API-Key).
 """
 import os
 import re
@@ -23,8 +23,8 @@ os.environ["TZ"] = "Asia/Kolkata"
 if hasattr(time, "tzset"):
     time.tzset()
 
-BASE = "/employeeworkspace/expenses"
-FRONTEND_DIR = Path(__file__).resolve().parents[2] / "employeeworkspace" / "expenses"
+BASE = "/workspace/expenses"
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "workspace" / "expenses"
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip'}
 MAX_FILE_SIZE = int(4.4 * 1024 * 1024)  # Vercel's request limit is 4.5 MB
@@ -62,7 +62,7 @@ def close_db(e=None):
         db.close()
 
 def init_db():
-    """Default categories and project on an empty database. Returns WorkDesk's session secret (shared sign-in)."""
+    """Default categories and project on an empty database. Returns Intelli Workspace's session secret (shared sign-in)."""
     db = pg.connect("expenseflow, wscompat")
     try:
         if not db.execute("SELECT 1 FROM categories LIMIT 1").fetchone():
@@ -87,13 +87,13 @@ def init_db():
         db.commit()
         r = db.execute("SELECT value FROM workdesk.settings WHERE key='secret'").fetchone()
         if not r:
-            raise RuntimeError("WorkDesk isn't set up yet — open /employeeworkspace/ once, then reload ExpenseFlow.")
+            raise RuntimeError("Intelli Workspace isn't set up yet — open /workspace/ once, then reload Intelli Expenses.")
         return r[0]
     finally:
         db.close()
 
 
-# ── Access: a signed-in WorkDesk employee, or a valid API key ────────────────
+# ── Access: a signed-in Intelli Workspace employee, or a valid API key ────────────────
 
 def key_hash(raw):
     return hashlib.sha256(raw.encode()).hexdigest()
@@ -115,7 +115,7 @@ def require_login():
     uid = session.get("uid")
     u = db.execute("SELECT role, permissions FROM workdesk.employees WHERE id=? AND active=1", (uid,)).fetchone() if uid else None
     if not u:
-        return jsonify({"error": "Please sign in to Intelli Workspace", "login": "/employeeworkspace/"}), 401
+        return jsonify({"error": "Please sign in to Intelli Workspace", "login": "/workspace/"}), 401
     if u["role"] != "admin":
         try:
             p = json.loads(u["permissions"] or "{}")
@@ -123,7 +123,7 @@ def require_login():
             p = {}
         sections = p.get("sections")
         if p.get("hide_money") or (isinstance(sections, list) and "expenseflow" not in sections):
-            return jsonify({"error": "You don't have access to ExpenseFlow", "login": "/employeeworkspace/"}), 403
+            return jsonify({"error": "You don't have access to Intelli Expenses", "login": "/workspace/"}), 403
         if p.get("view_only") and request.method != "GET":
             return jsonify({"error": "You have view-only access — ask an admin if you need to make changes"}), 403
     return None
@@ -954,9 +954,9 @@ def serve_index():
 
 
 app.wsgi_app = pg.StartupGuard(app, init_db)  # connects on the first request, not at import
-app.config.update(SESSION_COOKIE_NAME="wd_session", SESSION_COOKIE_PATH="/employeeworkspace",
+app.config.update(SESSION_COOKIE_NAME="wd_session", SESSION_COOKIE_PATH="/workspace",
                   SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_SECURE=os.environ.get("WORKDESK_INSECURE_COOKIES") != "1",
-                  SESSION_REFRESH_EACH_REQUEST=False)  # never re-issue WorkDesk's cookie from here
+                  SESSION_REFRESH_EACH_REQUEST=False)  # never re-issue Intelli Workspace's cookie from here
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050, debug=False)

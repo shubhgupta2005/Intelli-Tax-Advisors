@@ -17,45 +17,55 @@
       "permanent": true
     },
     {
-      "source": "/employeeworkspace",
-      "destination": "/employeeworkspace/",
+      "source": "/workspace",
+      "destination": "/workspace/",
       "permanent": true
     },
     {
-      "source": "/employeeworkspace/expenses",
-      "destination": "/employeeworkspace/expenses/",
+      "source": "/workspace/expenses",
+      "destination": "/workspace/expenses/",
+      "permanent": true
+    },
+    {
+      "source": "/employeeworkspace",
+      "destination": "/workspace/",
+      "permanent": true
+    },
+    {
+      "source": "/employeeworkspace/:path*",
+      "destination": "/workspace/:path*",
       "permanent": true
     }
   ],
   "rewrites": [
     {
-      "source": "/employeeworkspace/expenses/api/:path*",
+      "source": "/workspace/expenses/api/:path*",
       "destination": "/api/expenseflow"
     },
     {
-      "source": "/employeeworkspace/api/:path*",
+      "source": "/workspace/api/:path*",
       "destination": "/api/workdesk"
     },
     {
-      "source": "/employeeworkspace/receipts/:path*",
+      "source": "/workspace/receipts/:path*",
       "destination": "/api/workdesk"
     },
     {
-      "source": "/employeeworkspace/receipts-scan/:path*",
+      "source": "/workspace/receipts-scan/:path*",
       "destination": "/api/workdesk"
     },
     {
-      "source": "/employeeworkspace/chat-files/:path*",
+      "source": "/workspace/chat-files/:path*",
       "destination": "/api/workdesk"
     },
     {
-      "source": "/employeeworkspace/client-docs/:path*",
+      "source": "/workspace/client-docs/:path*",
       "destination": "/api/workdesk"
     }
   ],
   "headers": [
     {
-      "source": "/employeeworkspace/:path*",
+      "source": "/workspace/:path*",
       "headers": [
         {
           "key": "X-Robots-Tag",
@@ -76,7 +86,7 @@
       ]
     },
     {
-      "source": "/employeeworkspace/",
+      "source": "/workspace/",
       "headers": [
         {
           "key": "Cache-Control",
@@ -85,7 +95,7 @@
       ]
     },
     {
-      "source": "/employeeworkspace/index.html",
+      "source": "/workspace/index.html",
       "headers": [
         {
           "key": "Cache-Control",
@@ -94,7 +104,7 @@
       ]
     },
     {
-      "source": "/employeeworkspace/sw.js",
+      "source": "/workspace/sw.js",
       "headers": [
         {
           "key": "Cache-Control",
@@ -103,7 +113,7 @@
       ]
     },
     {
-      "source": "/employeeworkspace/expenses/",
+      "source": "/workspace/expenses/",
       "headers": [
         {
           "key": "Cache-Control",
@@ -112,7 +122,7 @@
       ]
     },
     {
-      "source": "/employeeworkspace/expenses/index.html",
+      "source": "/workspace/expenses/index.html",
       "headers": [
         {
           "key": "Cache-Control",
@@ -123,7 +133,7 @@
   ],
   "crons": [
     {
-      "path": "/employeeworkspace/api/cron/backup",
+      "path": "/workspace/api/cron/backup",
       "schedule": "30 20 * * *"
     }
   ]

@@ -1,4 +1,4 @@
-# Vercel entry point: WorkDesk server for intellitaxadvisors.com/employeeworkspace (see api/_workspace/workdesk.py).
+# Vercel entry point: WorkDesk server for intellitaxadvisors.com/workspace (see api/_workspace/workdesk.py).
 import os
 import sys
 

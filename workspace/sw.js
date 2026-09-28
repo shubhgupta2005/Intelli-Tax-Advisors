@@ -1,4 +1,4 @@
-// WorkDesk service worker: shows phone notifications and opens the right screen when tapped.
+// Intelli Workspace service worker: shows phone notifications and opens the right screen when tapped.
 // It deliberately does not cache pages, so everyone always sees live data.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
@@ -7,7 +7,7 @@ self.addEventListener('fetch', () => {});
 self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = { body: e.data && e.data.text() }; }
-  e.waitUntil(self.registration.showNotification(d.title || 'WorkDesk', {
+  e.waitUntil(self.registration.showNotification(d.title || 'Intelli Workspace', {
     body: d.body || '',
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',

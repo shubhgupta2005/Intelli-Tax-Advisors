@@ -1,4 +1,4 @@
--- Intelli Workspace (WorkDesk + ExpenseFlow) — database for intellitaxadvisors.com/employeeworkspace
+-- Intelli Workspace (WorkDesk + ExpenseFlow) — database for intellitaxadvisors.com/workspace
 -- Run once in Supabase → SQL Editor, after 003_compliance_calendar.sql. Safe to re-run.
 --
 -- The tables live in their own schemas (workdesk, expenseflow), NOT in public: Supabase's REST API only
