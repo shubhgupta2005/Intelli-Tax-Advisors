@@ -32,8 +32,8 @@
       "permanent": true
     },
     {
-      "source": "/employeeworkspace/:path*",
-      "destination": "/workspace/:path*",
+      "source": "/employeeworkspace/(.*)",
+      "destination": "/workspace/$1",
       "permanent": true
     }
   ],
